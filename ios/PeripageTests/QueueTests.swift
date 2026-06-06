@@ -36,4 +36,24 @@ struct QueueTests {
         let statuses = await queue.snapshot.map(\.status)
         #expect(statuses.allSatisfy { $0 == .done })
     }
+
+    @Test("Pausing prevents further drain; resume continues")
+    func pauseResume() async throws {
+        let printer = MockPrinterClient()
+        let queue = PrintQueue(printer: printer)
+        let a = try jobA(); let b = try jobB()
+
+        await queue.enqueue(a)
+        await queue.enqueue(b)
+        await queue.pause()
+        await queue.start()
+        await queue.waitForIdle(timeout: .milliseconds(200))
+
+        // Paused: no sends yet
+        #expect(printer.sends.isEmpty)
+
+        await queue.resume()
+        await queue.waitForIdle(timeout: .seconds(10))
+        #expect(printer.sends.count == 2)
+    }
 }
