@@ -166,7 +166,7 @@ struct PrintJob: Identifiable {
 ## Xcode setup
 
 - New project: SwiftUI Multiplatform App template
-- Bundle ID: `com.bryanelkus.peripage` (personal, not Atomic)
+- Bundle ID: `com.elkus.peripage` (personal, not Atomic)
 - Minimum deployment: iOS 17.0, macOS 14.0
 - Destinations: iPhone, Mac (Designed for iPad/Mac)
 - Capabilities: Bluetooth (entitlement on macOS sandbox; iOS uses Info.plist key only)
