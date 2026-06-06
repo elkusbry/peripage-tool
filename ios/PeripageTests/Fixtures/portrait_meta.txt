@@ -1,0 +1,6 @@
+width=576
+height=768
+raster_len=55296
+payload_len=55336
+row_bytes=72
+print_width_px=576
