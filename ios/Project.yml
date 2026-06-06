@@ -1,0 +1,49 @@
+name: Peripage
+options:
+  bundleIdPrefix: com.elkus
+  deploymentTarget:
+    iOS: "17.0"
+    macOS: "14.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    GENERATE_INFOPLIST_FILE: NO
+    INFOPLIST_FILE: Peripage/Resources/Info.plist
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_STRICT_CONCURRENCY: complete
+
+targets:
+  Peripage:
+    type: application
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: Peripage
+        excludes:
+          - "Resources/Info.plist"
+          - "Resources/Peripage.entitlements"
+    resources:
+      - Peripage/Resources/Assets.xcassets
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.elkus.peripage
+        CODE_SIGN_ENTITLEMENTS: Peripage/Resources/Peripage.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_APP_SANDBOX: YES
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+
+  PeripageTests:
+    type: bundle.unit-test
+    supportedDestinations: [iOS, macOS]
+    sources: [PeripageTests]
+    dependencies:
+      - target: Peripage
+    settings:
+      base:
+        BUNDLE_LOADER: "$(TEST_HOST)"
