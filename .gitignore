@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+
+# Python venv
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Editor / OS junk
+.idea/
+.vscode/
+*.swp
+
+# Local preview output
+peripage_preview.png
