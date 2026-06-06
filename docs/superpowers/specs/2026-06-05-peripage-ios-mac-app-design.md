@@ -166,14 +166,17 @@ struct PrintJob: Identifiable {
 ## Xcode setup
 
 - New project: SwiftUI Multiplatform App template
-- Bundle ID: `com.atomicobject.peripage` (placeholder — confirm at scaffold time)
+- Bundle ID: `com.bryanelkus.peripage` (personal, not Atomic)
 - Minimum deployment: iOS 17.0, macOS 14.0
 - Destinations: iPhone, Mac (Designed for iPad/Mac)
 - Capabilities: Bluetooth (entitlement on macOS sandbox; iOS uses Info.plist key only)
 - No SPM/CocoaPods dependencies for v1
 
+## Repo location
+
+The Xcode project lives in this repo at `ios/` (the directory will hold both the iOS and macOS builds despite the name, since they share one target). This keeps the Python CLI tool and the app side-by-side, and the protocol-parity fixtures generated from `print_photo.py` stay trivially accessible to the Swift tests.
+
 ## Open items for the implementation plan
 
-- Confirm bundle identifier and developer team
-- Decide whether the iOS app and Python tool live in the same repo (a `ios/` subfolder) or a new sibling repo. Default: new sibling repo `peripage-app/`, with this spec staying in `peripage-tool/docs/superpowers/specs/` for historical continuity.
+- Confirm the Apple Developer team ID at scaffold time (needed for signing)
 - Confirm rotation direction (clockwise) is what's wanted for the auto-portrait case; flip if not
