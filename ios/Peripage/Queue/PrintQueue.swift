@@ -84,13 +84,16 @@ public final class PrintQueue {
             } catch let e as BLEError {
                 consecutiveConnectFailures += 1
                 jobs[i].status = .failed(reason: String(describing: e))
+                Haptics.error()
                 return
             }
             jobs[i].status = .sending(progress: 0.0)
             try await printer.send(payload, jobId: job.id)
             jobs[i].status = .done
+            Haptics.success()
         } catch {
             jobs[i].status = .failed(reason: String(describing: error))
+            Haptics.error()
         }
     }
 }
