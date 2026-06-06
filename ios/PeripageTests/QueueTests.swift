@@ -56,4 +56,24 @@ struct QueueTests {
         await queue.waitForIdle(timeout: .seconds(10))
         #expect(printer.sends.count == 2)
     }
+
+    @Test("Two consecutive connect failures auto-pause the queue")
+    func autoPauseAfterTwoFailures() async throws {
+        let printer = MockPrinterClient()
+        printer.nextFailures = [
+            .connectThrows(.noPeripheralFound),
+            .connectThrows(.noPeripheralFound),
+        ]
+        let queue = PrintQueue(printer: printer)
+        await queue.enqueue(try jobA())
+        await queue.enqueue(try jobB())
+        await queue.start()
+        await queue.waitForIdle(timeout: .seconds(5))
+
+        let paused = await queue.isPaused
+        #expect(paused == true)
+        #expect(printer.sends.isEmpty)
+        let firstFailed = await queue.snapshot.first.map { if case .failed = $0.status { return true } else { return false } }
+        #expect(firstFailed == true)
+    }
 }
