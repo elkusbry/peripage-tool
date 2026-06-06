@@ -50,4 +50,9 @@ targets:
       - target: Peripage
     settings:
       base:
+        # Platform-conditional TEST_HOST: iOS bundle is flat
+        # (Peripage.app/Peripage), macOS bundle nests under Contents/MacOS.
+        "TEST_HOST[sdk=iphoneos*]": "$(BUILT_PRODUCTS_DIR)/Peripage.app/Peripage"
+        "TEST_HOST[sdk=iphonesimulator*]": "$(BUILT_PRODUCTS_DIR)/Peripage.app/Peripage"
+        "TEST_HOST[sdk=macosx*]": "$(BUILT_PRODUCTS_DIR)/Peripage.app/Contents/MacOS/Peripage"
         BUNDLE_LOADER: "$(TEST_HOST)"
