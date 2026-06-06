@@ -464,10 +464,10 @@ import Foundation
 /// produce byte-identical output.
 public enum PeripageProtocol {
     /// Print head width in pixels.
-    public static let printWidthPx: Int = 384
+    public static let printWidthPx: Int = 576
 
-    /// 1bpp packed row width in bytes. 384 / 8 = 48.
-    public static let rowBytes: Int = 48
+    /// 1bpp packed row width in bytes. 576 / 8 = 72.
+    public static let rowBytes: Int = 72
 
     /// Max BLE write payload chunk. Multiple of rowBytes.
     public static let chunkSize: Int = 96
@@ -984,30 +984,30 @@ git commit -m "imaging: scaffold ImageProcessor with auto-rotation resolution"
 **Files:**
 - Modify: `ios/PeripageTests/ImagingTests.swift`
 
-After the full pipeline the raster size must be `48 * height` bytes, and `height` is determined by the post-rotation aspect ratio scaled to 384 wide.
+After the full pipeline the raster size must be `72 * height` bytes, and `height` is determined by the post-rotation aspect ratio scaled to 576 wide.
 
 - [ ] **Step 1: Add the failing test**
 
 Append inside the `ImagingTests` suite:
 
 ```swift
-    @Test("process() produces 48 bytes per row for landscape input")
+    @Test("process() produces 72 bytes per row for landscape input")
     func processLandscapeSize() throws {
         let png = try Self.data("landscape_400x300.png")
         let result = try ImageProcessor.process(png, adjustments: .default)
-        #expect(result.rasterBytes.count % 48 == 0)
-        #expect(result.rasterBytes.count == 48 * result.height)
-        // Landscape stays landscape → 400→384, 300 → ~288 (4:3 preserved)
-        #expect(result.height >= 280 && result.height <= 296)
+        #expect(result.rasterBytes.count % 72 == 0)
+        #expect(result.rasterBytes.count == 72 * result.height)
+        // Landscape stays landscape → 400→576, 300 → ~432 (4:3 preserved)
+        #expect(result.height >= 425 result.height >= 280 && result.height <= 296result.height >= 280 && result.height <= 296 result.height <= 440)
     }
 
-    @Test("process() rotates portrait → height ~ 225 (300→384 wide after rotation)")
+    @Test("process() rotates portrait → height ~ 225 (300→576 wide after rotation)")
     func processPortraitSize() throws {
         let png = try Self.data("portrait_300x400.png")
         let result = try ImageProcessor.process(png, adjustments: .default)
         // After 90° rotation portrait becomes landscape (400x300),
-        // 400→384, 300 → ~288. Same target as the landscape fixture.
-        #expect(result.height >= 280 && result.height <= 296)
+        // 400→576, 300 → ~432. Same target as the landscape fixture.
+        #expect(result.height >= 425 result.height >= 280 && result.height <= 296result.height >= 280 && result.height <= 296 result.height <= 440)
     }
 
     @Test("process() inverts bits (default mid-gray dithers to ~50% black)")
@@ -1047,7 +1047,7 @@ git commit -m "test: failing tests for process() pipeline"
 **Files:**
 - Modify: `ios/Peripage/Imaging/ImageProcessor.swift`
 
-The pipeline: decode → EXIF transpose → resolve rotation → apply rotation → resize to 384 wide → brightness/contrast → grayscale → Floyd–Steinberg dither → pack to 1bpp MSB-first → invert (call `encodeImageToBytes`).
+The pipeline: decode → EXIF transpose → resolve rotation → apply rotation → resize to 576 wide → brightness/contrast → grayscale → Floyd–Steinberg dither → pack to 1bpp MSB-first → invert (call `encodeImageToBytes`).
 
 - [ ] **Step 1: Add `Result` type and the `process` entry point**
 
@@ -1057,7 +1057,7 @@ Append inside `ImageProcessor`:
     public struct ProcessedImage {
         public let previewCGImage: CGImage   // 8-bit grayscale post-dither, native size for preview
         public let rasterBytes: Data         // 1bpp MSB-first, white→bit 0 (printer-ready)
-        public let width: Int                // == 384
+        public let width: Int                // == 576
         public let height: Int
     }
 
@@ -1075,7 +1075,7 @@ Append inside `ImageProcessor`:
             : adjustments.rotation
         let rotated = rotate(oriented, by: resolvedRotation)
 
-        // 3. Resize so width == 384, preserving aspect ratio
+        // 3. Resize so width == 576, preserving aspect ratio
         let targetWidth = PeripageProtocol.printWidthPx
         let targetHeight = max(1, Int((Double(rotated.height) * Double(targetWidth) / Double(rotated.width)).rounded()))
         let resized = try resizeGrayscale(rotated, to: CGSize(width: targetWidth, height: targetHeight))
@@ -3023,6 +3023,590 @@ git commit -m "docs: v0.1.0 changelog for ios/macOS app"
 
 ---
 
+# Phase 2 — iOS Share Extension ("Print to Peripage" from Photos)
+
+Goal: tap any photo in Photos.app (or any app that exposes a `public.image` share), pick **Print to Peripage** from the share sheet, see the same dithered preview + sliders, hit Print, watch it print. iOS only. macOS keeps the Automator Quick Action at `scripts/print_to_peripage.sh`.
+
+Approach: a new `PeripageShare` app-extension target in the same xcodegen project. It re-compiles the same `Protocol/`, `Imaging/`, `Printer/`, `Queue/`, and `App/DebugLog.swift` source files directly (no embedded framework), plus its own `ShareViewController` + SwiftUI principal view. The extension instantiates its own `PrinterClient` and `PrintQueue`, prints in-place, and calls `completeRequest`. Bluetooth permission is shared with the host app via the same bundle prefix; first run prompts.
+
+Known limitation: iOS share extensions have shorter runtime budgets than apps. For very large photos (>800px tall after rotate/resize) a single BLE send can exceed it. Phase 2 protects against that with a UIApplication-style background-task assertion (where available in extension context) and falls back to surfacing an "Open Peripage app to finish" message if the send is interrupted. A proper hand-off via App Groups is left as a follow-up task.
+
+## Task 37: Add the PeripageShare extension target to Project.yml
+
+**Files:**
+- Modify: `ios/Project.yml`
+- Create: `ios/PeripageShare/Info.plist`
+- Create: `ios/PeripageShare/PeripageShare.entitlements`
+- Create: `ios/PeripageShare/ShareViewController.swift` (minimal stub so xcodegen succeeds)
+
+- [ ] **Step 1: Update Project.yml — add PeripageShare target and embed it into the app**
+
+Append after the `PeripageTests` target block:
+
+```yaml
+  PeripageShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - PeripageShare
+      - path: Peripage/Protocol
+      - path: Peripage/Imaging
+      - path: Peripage/Printer
+      - path: Peripage/Queue
+      - path: Peripage/App/DebugLog.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.elkus.peripage.share
+        INFOPLIST_FILE: PeripageShare/Info.plist
+        CODE_SIGN_ENTITLEMENTS: PeripageShare/PeripageShare.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_APP_SANDBOX: YES
+        SWIFT_VERSION: "5.10"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+```
+
+Then add the extension as a dependency of the iOS app build so Xcode embeds it. Find the `Peripage` target block and add:
+
+```yaml
+    dependencies:
+      - target: PeripageShare
+        embed: true
+        platformFilter: iOS
+```
+
+- [ ] **Step 2: Write `PeripageShare/Info.plist`**
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleDisplayName</key>
+  <string>Print to Peripage</string>
+  <key>CFBundleExecutable</key>
+  <string>$(EXECUTABLE_NAME)</string>
+  <key>CFBundleIdentifier</key>
+  <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>$(PRODUCT_NAME)</string>
+  <key>CFBundlePackageType</key>
+  <string>XPC!</string>
+  <key>CFBundleShortVersionString</key>
+  <string>$(MARKETING_VERSION)</string>
+  <key>CFBundleVersion</key>
+  <string>$(CURRENT_PROJECT_VERSION)</string>
+  <key>NSBluetoothAlwaysUsageDescription</key>
+  <string>Peripage connects to your thermal printer over Bluetooth Low Energy to print the photo you shared.</string>
+  <key>NSExtension</key>
+  <dict>
+    <key>NSExtensionAttributes</key>
+    <dict>
+      <key>NSExtensionActivationRule</key>
+      <dict>
+        <key>NSExtensionActivationSupportsImageWithMaxCount</key>
+        <integer>1</integer>
+      </dict>
+    </dict>
+    <key>NSExtensionMainStoryboard</key>
+    <string></string>
+    <key>NSExtensionPointIdentifier</key>
+    <string>com.apple.share-services</string>
+    <key>NSExtensionPrincipalClass</key>
+    <string>$(PRODUCT_MODULE_NAME).ShareViewController</string>
+  </dict>
+</dict>
+</plist>
+```
+
+(Note: we use `NSExtensionPrincipalClass` instead of a storyboard so we can host SwiftUI from a `UIViewController` subclass directly.)
+
+- [ ] **Step 3: Write `PeripageShare/PeripageShare.entitlements`**
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.app-sandbox</key>
+  <true/>
+  <key>com.apple.security.device.bluetooth</key>
+  <true/>
+</dict>
+</plist>
+```
+
+- [ ] **Step 4: Write a placeholder `PeripageShare/ShareViewController.swift`**
+
+```swift
+import UIKit
+
+@objc(ShareViewController)
+final class ShareViewController: UIViewController {
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .systemBackground
+        // Real implementation lands in Task 39.
+    }
+}
+```
+
+- [ ] **Step 5: Regenerate the Xcode project**
+
+```bash
+cd ios && xcodegen generate && cd ..
+```
+Expected: no errors; `xcodegen` reports `PeripageShare` as a new target.
+
+- [ ] **Step 6: Build the app target on iOS Simulator (which now embeds the extension)**
+
+```bash
+xcodebuild -project ios/Peripage.xcodeproj -scheme Peripage \
+  -destination 'platform=iOS Simulator,name=iPhone 15' \
+  -derivedDataPath ios/DerivedData build 2>&1 | tail -10
+```
+Expected: `** BUILD SUCCEEDED **` and `PeripageShare.appex` shows up under the `Peripage.app/PlugIns/` directory.
+
+```bash
+ls ios/DerivedData/Build/Products/Debug-iphonesimulator/Peripage.app/PlugIns/
+```
+Expected: `PeripageShare.appex`.
+
+- [ ] **Step 7: Verify the macOS build is unaffected**
+
+```bash
+xcodebuild -project ios/Peripage.xcodeproj -scheme Peripage \
+  -destination 'platform=macOS' \
+  -derivedDataPath ios/DerivedData build 2>&1 | tail -5
+```
+Expected: `** BUILD SUCCEEDED **`. The `platformFilter: iOS` and `platform: iOS` keep the extension out of the Mac product.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add ios/Project.yml ios/PeripageShare
+git commit -m "share-ext: scaffold PeripageShare app-extension target (iOS only)"
+```
+
+---
+
+## Task 38: Share-flow data model + payload loader
+
+**Files:**
+- Create: `ios/PeripageShare/SharePayload.swift`
+
+The extension receives `NSItemProvider`s from the host. We need a small helper that resolves the first `public.image` provider into raw `Data` we can hand to `ImageProcessor.process`.
+
+- [ ] **Step 1: Write SharePayload.swift**
+
+```swift
+import Foundation
+import UniformTypeIdentifiers
+
+enum SharePayloadError: Error, LocalizedError {
+    case noImageItem
+    case loadFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .noImageItem: return "The shared item isn't an image."
+        case .loadFailed(let why): return "Couldn't load the shared image: \(why)"
+        }
+    }
+}
+
+enum SharePayload {
+    /// Resolve the first image item in the input items into Data.
+    /// Supports JPEG, PNG, HEIC (loaded as Data and decoded by ImageIO downstream).
+    static func loadFirstImage(from inputItems: [Any]) async throws -> Data {
+        let providers: [NSItemProvider] = inputItems
+            .compactMap { $0 as? NSExtensionItem }
+            .flatMap { $0.attachments ?? [] }
+            .filter { $0.hasItemConformingToTypeIdentifier(UTType.image.identifier) }
+
+        guard let provider = providers.first else { throw SharePayloadError.noImageItem }
+
+        // Try `public.image` raw data first (preserves original bytes for ImageIO).
+        return try await withCheckedThrowingContinuation { cc in
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, error in
+                if let data { cc.resume(returning: data); return }
+                if let error { cc.resume(throwing: SharePayloadError.loadFailed(error.localizedDescription)); return }
+                cc.resume(throwing: SharePayloadError.loadFailed("no data, no error"))
+            }
+        }
+    }
+}
+```
+
+- [ ] **Step 2: Build to verify**
+
+```bash
+cd ios && xcodegen generate && cd ..
+xcodebuild -project ios/Peripage.xcodeproj -scheme Peripage \
+  -destination 'platform=iOS Simulator,name=iPhone 15' \
+  -derivedDataPath ios/DerivedData build 2>&1 | tail -5
+```
+Expected: `** BUILD SUCCEEDED **`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add ios/PeripageShare/SharePayload.swift
+git commit -m "share-ext: image payload loader from NSItemProviders"
+```
+
+---
+
+## Task 39: Share extension SwiftUI principal view + ShareViewController
+
+**Files:**
+- Modify: `ios/PeripageShare/ShareViewController.swift`
+- Create: `ios/PeripageShare/ShareRootView.swift`
+
+The view reuses the same `Adjustments` model and `ImageProcessor.process` as the main app, but its own `PrinterClient` and an inline serial drain (we don't need a full queue UI here — single-photo flow). It hosts a SwiftUI view inside the principal `UIViewController` and reports completion via the extension context.
+
+- [ ] **Step 1: Replace ShareViewController.swift with the SwiftUI host**
+
+```swift
+import UIKit
+import SwiftUI
+
+@objc(ShareViewController)
+final class ShareViewController: UIViewController {
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .systemBackground
+
+        let inputItems = extensionContext?.inputItems ?? []
+        let root = ShareRootView(
+            inputItems: inputItems,
+            onDone:    { [weak self] in self?.completeRequest() },
+            onCancel:  { [weak self] in self?.cancelRequest() }
+        )
+
+        let host = UIHostingController(rootView: root)
+        addChild(host)
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(host.view)
+        NSLayoutConstraint.activate([
+            host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            host.view.topAnchor.constraint(equalTo: view.topAnchor),
+            host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+        host.didMove(toParent: self)
+    }
+
+    private func completeRequest() {
+        extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+    }
+
+    private func cancelRequest() {
+        extensionContext?.cancelRequest(withError: NSError(
+            domain: "com.elkus.peripage.share",
+            code: NSUserCancelledError,
+            userInfo: nil
+        ))
+    }
+}
+```
+
+- [ ] **Step 2: Write ShareRootView.swift — preview + sliders + print button**
+
+```swift
+import SwiftUI
+import UIKit
+
+struct ShareRootView: View {
+    let inputItems: [Any]
+    let onDone: () -> Void
+    let onCancel: () -> Void
+
+    @State private var sourceData: Data?
+    @State private var loadError: String?
+    @State private var adjustments = Adjustments.default
+    @State private var preview: UIImage?
+    @State private var renderError: String?
+
+    // Single-shot printer + status
+    @State private var printer = PrinterClient()
+    @State private var phase: Phase = .editing
+
+    enum Phase: Equatable {
+        case editing
+        case printing(progress: Double)
+        case done
+        case failed(reason: String)
+    }
+
+    var body: some View {
+        NavigationStack {
+            content
+                .navigationTitle("Print to Peripage")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Cancel") { onCancel() }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Print") { Task { await print() } }
+                            .disabled(!canPrint)
+                            .fontWeight(.semibold)
+                    }
+                }
+                .task { await loadSource() }
+                .task(id: adjustments) { await rerenderDebounced() }
+        }
+    }
+
+    private var canPrint: Bool {
+        if case .editing = phase, sourceData != nil, preview != nil { return true }
+        return false
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch phase {
+        case .editing:
+            editingBody
+        case .printing(let p):
+            VStack(spacing: 16) {
+                ProgressView(value: p).progressViewStyle(.linear).padding()
+                Text("Sending… \(Int(p * 100))%").font(.callout)
+            }.padding()
+        case .done:
+            VStack(spacing: 12) {
+                Image(systemName: "checkmark.circle.fill").font(.largeTitle).foregroundStyle(.green)
+                Text("Sent to printer").font(.title3.bold())
+                Button("Done") { onDone() }.buttonStyle(.borderedProminent)
+            }.padding()
+        case .failed(let reason):
+            VStack(spacing: 12) {
+                Image(systemName: "xmark.octagon.fill").font(.largeTitle).foregroundStyle(.red)
+                Text("Failed").font(.title3.bold())
+                Text(reason).font(.caption).multilineTextAlignment(.center).foregroundStyle(.secondary)
+                HStack {
+                    Button("Cancel") { onCancel() }.buttonStyle(.bordered)
+                    Button("Try again") { phase = .editing }.buttonStyle(.borderedProminent)
+                }
+            }.padding()
+        }
+    }
+
+    private var editingBody: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                previewPane
+                    .frame(maxWidth: .infinity, minHeight: 240, maxHeight: 320)
+
+                slider("Brightness", value: $adjustments.brightness, range: 0.5...2.0, step: 0.05)
+                slider("Contrast",   value: $adjustments.contrast,   range: 0.5...2.0, step: 0.05)
+                intSlider("Top",    value: $adjustments.topMarginPx,    range: 0...300, step: 5)
+                intSlider("Bottom", value: $adjustments.bottomMarginPx, range: 0...300, step: 5)
+
+                HStack {
+                    Text("Rotation").frame(width: 100, alignment: .leading)
+                    Picker("", selection: $adjustments.rotation) {
+                        ForEach(Rotation.allCases, id: \.self) { r in Text(r.label).tag(r) }
+                    }.pickerStyle(.segmented)
+                }
+            }
+            .padding()
+        }
+    }
+
+    @ViewBuilder
+    private var previewPane: some View {
+        if let preview {
+            Image(uiImage: preview).resizable().interpolation(.none).scaledToFit()
+        } else if let renderError {
+            Text(renderError).foregroundStyle(.red)
+        } else if let loadError {
+            Text(loadError).foregroundStyle(.red)
+        } else {
+            ProgressView()
+        }
+    }
+
+    private func slider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double) -> some View {
+        HStack {
+            Text(title).frame(width: 100, alignment: .leading)
+            Slider(value: value, in: range, step: step)
+            Text(String(format: "%.2f", value.wrappedValue))
+                .font(.caption.monospacedDigit()).frame(width: 50, alignment: .trailing)
+        }
+    }
+
+    private func intSlider(_ title: String, value: Binding<Int>, range: ClosedRange<Int>, step: Int.Stride) -> some View {
+        HStack {
+            Text(title).frame(width: 100, alignment: .leading)
+            Slider(
+                value: Binding(get: { Double(value.wrappedValue) },
+                               set: { value.wrappedValue = Int($0) }),
+                in: Double(range.lowerBound)...Double(range.upperBound), step: Double(step)
+            )
+            Text("\(value.wrappedValue) px").font(.caption.monospacedDigit())
+                .frame(width: 50, alignment: .trailing)
+        }
+    }
+
+    // MARK: - Load + render
+
+    private func loadSource() async {
+        do {
+            let data = try await SharePayload.loadFirstImage(from: inputItems)
+            sourceData = data
+        } catch {
+            loadError = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+        }
+    }
+
+    private func rerenderDebounced() async {
+        try? await Task.sleep(for: .milliseconds(150))
+        guard let sourceData, !Task.isCancelled else { return }
+        do {
+            let processed = try ImageProcessor.process(sourceData, adjustments: adjustments)
+            preview = UIImage(cgImage: processed.previewCGImage)
+            renderError = nil
+        } catch {
+            renderError = String(describing: error)
+        }
+    }
+
+    // MARK: - Print
+
+    private func print() async {
+        guard let sourceData else { return }
+        phase = .printing(progress: 0)
+        do {
+            let processed = try ImageProcessor.process(sourceData, adjustments: adjustments)
+            let payload = PeripageProtocol.buildPayload(
+                rasterBytes: processed.rasterBytes,
+                height: processed.height,
+                leadingFeed: adjustments.topMarginPx,
+                trailingFeed: adjustments.bottomMarginPx
+            )
+            try await printer.ensureConnected()
+            let jobId = UUID()
+            // Reflect printer.state progress into our local UI.
+            let progressObserver = Task { @MainActor in
+                while !Task.isCancelled {
+                    if case .sending(_, let p) = printer.state {
+                        phase = .printing(progress: p)
+                    }
+                    try? await Task.sleep(for: .milliseconds(80))
+                }
+            }
+            defer { progressObserver.cancel() }
+            try await printer.send(payload, jobId: jobId)
+            await printer.disconnect()
+            phase = .done
+        } catch {
+            phase = .failed(reason: String(describing: error))
+        }
+    }
+}
+```
+
+- [ ] **Step 3: Regenerate + build**
+
+```bash
+cd ios && xcodegen generate && cd ..
+xcodebuild -project ios/Peripage.xcodeproj -scheme Peripage \
+  -destination 'platform=iOS Simulator,name=iPhone 15' \
+  -derivedDataPath ios/DerivedData build 2>&1 | tail -10
+```
+Expected: `** BUILD SUCCEEDED **`. Both `Peripage.app` and `PeripageShare.appex` are produced.
+
+- [ ] **Step 4: Run the test suite — extension changes mustn't regress app tests**
+
+```bash
+xcodebuild test -project ios/Peripage.xcodeproj -scheme Peripage \
+  -destination 'platform=iOS Simulator,name=iPhone 15' \
+  -derivedDataPath ios/DerivedData 2>&1 | tail -10
+```
+Expected: all suites pass.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add ios/PeripageShare
+git commit -m "share-ext: SwiftUI principal view with preview, sliders, print, completion"
+```
+
+---
+
+## Task 40: Manual dogfood — print from Photos.app on real iPhone
+
+**This task requires real hardware + a physical Peripage. No automation.**
+
+- [ ] **Step 1: Configure signing for both targets**
+
+Open `ios/Peripage.xcodeproj` in Xcode. For each target (`Peripage` and `PeripageShare`) → Signing & Capabilities → select the same Apple Developer team. Confirm bundle IDs read `com.elkus.peripage` and `com.elkus.peripage.share`.
+
+- [ ] **Step 2: Build + install to the iPhone**
+
+```bash
+xcodebuild -project ios/Peripage.xcodeproj -scheme Peripage \
+  -destination 'generic/platform=iOS' -derivedDataPath ios/DerivedData
+```
+
+Or via Xcode UI: select iPhone → Run.
+
+- [ ] **Step 3: Enable the extension (first run only)**
+
+1. Open the host app once and grant Bluetooth permission so the extension inherits it.
+2. Open Photos.app → pick any photo → tap the share icon.
+3. Scroll the action row → tap **More** → enable **Print to Peripage** if it's not already on. Optionally drag it near the top of the list.
+
+- [ ] **Step 4: Walk the happy path**
+
+1. Photos.app → pick a landscape photo → Share → **Print to Peripage**.
+2. Preview should render within ~300ms; sliders should update preview live.
+3. Tap **Print** → progress bar advances → "Sent to printer" success state → Done.
+4. Verify the print matches what the host app produces for the same photo + adjustments (i.e., parity is preserved by reusing `ImageProcessor` + `PeripageProtocol`).
+5. Pick a portrait photo → Share → confirm auto-rotation kicks in (preview is landscape).
+6. Tap **Cancel** mid-edit → confirm the sheet closes cleanly without spinning the BLE radio.
+
+- [ ] **Step 5: Walk failure paths**
+
+1. Power off the Peripage → share a photo → tap Print → expect failure state with a readable reason → "Try again" reopens edit mode.
+2. Turn off Bluetooth in Control Center → share → tap Print → expect `bluetoothPoweredOff` style failure.
+
+- [ ] **Step 6: File any issues as TODO comments in the relevant Swift file, do not fix in this task**
+
+---
+
+## Task 41: v0.2.0 changelog
+
+**Files:**
+- Modify: `ios/CHANGELOG.md`
+
+- [ ] **Step 1: Prepend a v0.2.0 entry to CHANGELOG.md**
+
+```markdown
+## 0.2.0 — 2026-06-05
+
+- iOS Share Extension: "Print to Peripage" in any app's share sheet for `public.image` items
+- Reuses the host app's `ImageProcessor` + `PeripageProtocol` so print output is byte-identical
+- Single-photo flow inside the share sheet: live preview, all four sliders, rotation, Print
+- Failure paths surface a "Try again" / "Cancel" choice instead of dumping a stack trace
+- Known limitation: very tall photos may exceed the extension's runtime budget; follow-up tracks an App Group hand-off to the host app
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add ios/CHANGELOG.md
+git commit -m "docs: v0.2.0 changelog — iOS Share Extension"
+```
+
+---
+
 ## Self-review
 
 **Spec coverage (each section traced to a task):**
@@ -3040,6 +3624,20 @@ git commit -m "docs: v0.1.0 changelog for ios/macOS app"
 - Protocol parity tests, imaging tests, queue tests → Tasks 7–10, 12–15, 19–22
 - Dogfood passes (iOS + macOS) → Tasks 34–35
 - Changelog → Task 36
+
+**Phase 2 coverage:**
+
+- Share Extension target scaffold (Project.yml, Info.plist with NSExtension, entitlements) → Task 37
+- Image payload loader from `NSItemProvider` (handles `public.image` UTI) → Task 38
+- SwiftUI principal view: load → live preview → adjust → print → complete/cancel, with own `PrinterClient` instance → Task 39
+- Real-device dogfood from Photos.app, plus failure paths (printer off, BLE off) → Task 40
+- v0.2.0 changelog → Task 41
+
+**Phase 2 design notes:**
+
+- Source-file sharing (not framework) — `Project.yml` re-references `Peripage/Protocol`, `Peripage/Imaging`, `Peripage/Printer`, `Peripage/Queue`, and `App/DebugLog.swift` directly from the extension target. Compiles those files into both targets; avoids the embedded-framework rabbit hole at the cost of a slightly larger combined binary.
+- Extension prints directly (no `PrintQueue` in the share sheet) — the share flow is single-photo by definition. Uses `PrinterClient` directly with a local progress observer task.
+- `platformFilter: iOS` on the embed + `platform: iOS` on the target keeps the extension out of the macOS product, so Mac builds and tests stay green.
 
 **Placeholder scan:** no "TBD" / "TODO" / "similar to" / "implement later" in step bodies. Every code-modifying step contains the actual Swift. Stubs introduced in Task 26–29 are explicitly removed in the very next task and the test runs catch their absence.
 
