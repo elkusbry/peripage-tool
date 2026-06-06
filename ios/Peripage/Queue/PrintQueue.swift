@@ -51,9 +51,15 @@ public final class PrintQueue {
 
     // MARK: - Internal
 
+    private var consecutiveConnectFailures = 0
+
     private func drain() async {
         while let index = nextPendingIndex(), !isPaused {
             await process(jobIndex: index)
+            if consecutiveConnectFailures >= 2 {
+                isPaused = true
+                break
+            }
         }
     }
 
@@ -72,7 +78,14 @@ public final class PrintQueue {
                 leadingFeed: job.adjustments.topMarginPx,
                 trailingFeed: job.adjustments.bottomMarginPx
             )
-            try await printer.ensureConnected()
+            do {
+                try await printer.ensureConnected()
+                consecutiveConnectFailures = 0
+            } catch let e as BLEError {
+                consecutiveConnectFailures += 1
+                jobs[i].status = .failed(reason: String(describing: e))
+                return
+            }
             jobs[i].status = .sending(progress: 0.0)
             try await printer.send(payload, jobId: job.id)
             jobs[i].status = .done
