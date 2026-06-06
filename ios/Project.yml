@@ -37,6 +37,10 @@ targets:
       configs:
         Debug:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+    scheme:
+      testTargets:
+        - PeripageTests
+      gatherCoverageData: false
 
   PeripageTests:
     type: bundle.unit-test

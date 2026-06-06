@@ -31,4 +31,11 @@ public enum PeripageProtocol {
 
     /// Reset / wake command sent at start and end of every job.
     public static let cmdReset = Data([0x10, 0x11, 0xff, 0xfe, 0x01])
+
+    /// Invert each byte (white pixel bit → 0, black pixel bit → 1) so the
+    /// printer fires its heating elements correctly. Input is raw
+    /// MSB-first 1bpp packed bytes from a 576px-wide bitmap.
+    public static func encodeImageToBytes(_ rawBits: Data) -> Data {
+        Data(rawBits.map { $0 ^ 0xFF })
+    }
 }
