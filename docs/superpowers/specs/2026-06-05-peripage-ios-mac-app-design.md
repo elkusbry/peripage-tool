@@ -36,8 +36,8 @@ Rationale for single target vs. shared Swift Package: the two apps do the same t
 
 ### Modules (folders under one target)
 
-- **`Protocol/`** — pure, stateless port of the Python protocol code. Constants: `PRINT_WIDTH_PX = 384`, `ROW_BYTES = 48`, `CHUNK_SIZE = 96`, `ROWS_PER_BLOCK = 256`, `WRITE_UUID = "0000ff02-0000-1000-8000-00805f9b34fb"`, `CMD_RESET = Data([0x10, 0x11, 0xff, 0xfe, 0x01])`, name prefix `"PeriPage"`. One key function: `buildPayload(rasterBytes:height:leadingFeed:trailingFeed:) -> Data` that mirrors Python's `build_payload` byte-for-byte.
-- **`Imaging/`** — `ImageProcessor` takes `Data` (HEIC/JPG/PNG) plus an `Adjustments` struct and returns `(previewImage, rasterBytes)`. CoreGraphics for EXIF transpose, rotation, resize to 384 wide. Floyd–Steinberg dither + invert (white pixel → bit 0, matching Python's XOR with 0xFF).
+- **`Protocol/`** — pure, stateless port of the Python protocol code. Constants: `PRINT_WIDTH_PX = 576`, `ROW_BYTES = 72`, `CHUNK_SIZE = 96`, `ROWS_PER_BLOCK = 256`, `WRITE_UUID = "0000ff02-0000-1000-8000-00805f9b34fb"`, `CMD_RESET = Data([0x10, 0x11, 0xff, 0xfe, 0x01])`, name prefix `"PeriPage"`. One key function: `buildPayload(rasterBytes:height:leadingFeed:trailingFeed:) -> Data` that mirrors Python's `build_payload` byte-for-byte.
+- **`Imaging/`** — `ImageProcessor` takes `Data` (HEIC/JPG/PNG) plus an `Adjustments` struct and returns `(previewImage, rasterBytes)`. CoreGraphics for EXIF transpose, rotation, resize to 576 wide. Floyd–Steinberg dither + invert (white pixel → bit 0, matching Python's XOR with 0xFF).
 - **`Printer/`** — `PrinterClient`, an `@Observable` actor wrapping `CBCentralManager`. Async API: `scan() async throws -> Peripheral`, `connect(_:)`, `write(_ data: Data)` (chunks at 96 bytes with 15 ms gap, exactly like the Python). Publishes `state: Disconnected / Scanning / Connected / Sending(progress)`.
 - **`Queue/`** — `PrintQueue`, `@Observable`. Holds `[PrintJob]` where a job is `{ id, sourceData, adjustments, status }`. A single worker task drains the queue serially, holding the BLE connection open across jobs and reconnecting only on disconnect.
 - **`App/`** — SwiftUI scenes, views, view models.
@@ -77,14 +77,14 @@ macOS: centered in a min 540×640 window. iOS: fills the screen.
 
 Pushed (iOS) / opened in detail pane or sheet (macOS) after a photo is picked.
 
-- **Top half**: dithered preview rendered at native 384 px width, displayed scaled-to-fit with a checkerboard background so the actual print output is visible
+- **Top half**: dithered preview rendered at native 576 px width, displayed scaled-to-fit with a checkerboard background so the actual print output is visible
 - **Bottom half**: four sliders
   - Brightness: 0.5–2.0, default 1.0
   - Contrast: 0.5–2.0, default 1.2
   - Top margin: 0–300 px, default 40
   - Bottom margin: 0–300 px, default 120
 - **Rotation control**: a 5-position segmented picker — `Auto · 0° · 90° · 180° · 270°`. Default is `Auto`.
-- **Auto rotation rule**: after EXIF transpose, if `image.width >= image.height` (landscape), rotate 0°. Otherwise (portrait), rotate 90° clockwise. Goal: the photo's long axis always fits the 384 px print width, yielding compact prints (no 4-foot receipts). This is the **opposite** of the current Python behavior, which rotates landscapes so the long axis runs down the strip.
+- **Auto rotation rule**: after EXIF transpose, if `image.width >= image.height` (landscape), rotate 0°. Otherwise (portrait), rotate 90° clockwise. Goal: the photo's long axis always fits the 576 px print width, yielding compact prints (no 4-foot receipts). This is the **opposite** of the current Python behavior, which rotates landscapes so the long axis runs down the strip.
 - **Buttons**: "Add to queue" (always available); "Print now" (adds + immediately starts the queue if idle)
 - Slider/rotation changes are debounced ~150 ms before re-dithering, so the preview doesn't recompute on every drag tick
 

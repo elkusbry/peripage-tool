@@ -998,16 +998,16 @@ Append inside the `ImagingTests` suite:
         #expect(result.rasterBytes.count % 72 == 0)
         #expect(result.rasterBytes.count == 72 * result.height)
         // Landscape stays landscape → 400→576, 300 → ~432 (4:3 preserved)
-        #expect(result.height >= 425 result.height >= 280 && result.height <= 296result.height >= 280 && result.height <= 296 result.height <= 440)
+        #expect(result.height >= 425 && result.height <= 440)
     }
 
-    @Test("process() rotates portrait → height ~ 225 (300→576 wide after rotation)")
+    @Test("process() rotates portrait → height ~ 432 (300→576 wide after rotation)")
     func processPortraitSize() throws {
         let png = try Self.data("portrait_300x400.png")
         let result = try ImageProcessor.process(png, adjustments: .default)
         // After 90° rotation portrait becomes landscape (400x300),
         // 400→576, 300 → ~432. Same target as the landscape fixture.
-        #expect(result.height >= 425 result.height >= 280 && result.height <= 296result.height >= 280 && result.height <= 296 result.height <= 440)
+        #expect(result.height >= 425 && result.height <= 440)
     }
 
     @Test("process() inverts bits (default mid-gray dithers to ~50% black)")
