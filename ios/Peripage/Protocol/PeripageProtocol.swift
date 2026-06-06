@@ -38,4 +38,49 @@ public enum PeripageProtocol {
     public static func encodeImageToBytes(_ rawBits: Data) -> Data {
         Data(rawBits.map { $0 ^ 0xFF })
     }
+
+    /// Build the full byte stream sent to the printer for one image:
+    ///   CMD_RESET | (ESC J n) leading-feed | raster blocks | (ESC J n) trailing-feed | CMD_RESET
+    public static func buildPayload(
+        rasterBytes: Data,
+        height: Int,
+        leadingFeed: Int,
+        trailingFeed: Int
+    ) -> Data {
+        precondition(rasterBytes.count == rowBytes * height,
+                     "raster size (\(rasterBytes.count)) != rowBytes*height (\(rowBytes * height))")
+
+        var out = Data()
+        out.append(cmdReset)
+        appendFeed(into: &out, pixels: leadingFeed)
+
+        var rowsSent = 0
+        while rowsSent < height {
+            let rowsInBlock = min(rowsPerBlock, height - rowsSent)
+            let xL = UInt8(rowBytes & 0xFF)
+            let xH = UInt8((rowBytes >> 8) & 0xFF)
+            let yL = UInt8(rowsInBlock & 0xFF)
+            let yH = UInt8((rowsInBlock >> 8) & 0xFF)
+            out.append(contentsOf: [0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH])
+
+            let start = rowsSent * rowBytes
+            let end = start + rowsInBlock * rowBytes
+            out.append(rasterBytes[start..<end])
+
+            rowsSent += rowsInBlock
+        }
+
+        appendFeed(into: &out, pixels: trailingFeed)
+        out.append(cmdReset)
+        return out
+    }
+
+    private static func appendFeed(into out: inout Data, pixels: Int) {
+        var left = pixels
+        while left > 0 {
+            let n = min(left, 255)
+            out.append(contentsOf: [0x1B, 0x4A, UInt8(n)])
+            left -= n
+        }
+    }
 }
