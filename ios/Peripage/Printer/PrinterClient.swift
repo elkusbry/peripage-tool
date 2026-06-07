@@ -39,34 +39,43 @@ public final class PrinterClient: NSObject, PrinterClientProtocol {
         }
         let total = payload.count
         var sent = 0
-        let chunkSize = PeripageProtocol.chunkSize
-        // PREFER .withResponse when supported: CoreBluetooth doesn't reliably
-        // backpressure .withoutResponse on iOS — excess writes are silently
-        // dropped once its internal queue is full. .withResponse waits for the
-        // ATT-level write response, which is genuine end-to-end delivery.
+
+        // Match the working Python tool: .withoutResponse with proper iOS
+        // flow control. .withResponse adds 20–40ms per chunk while the
+        // peripheral ACKs each write — the Peripage firmware's receive
+        // buffer appears to time out under that pacing and silently
+        // discards the job.
         let writeType: CBCharacteristicWriteType =
-            writeChar.properties.contains(.write) ? .withResponse : .withoutResponse
-        DebugLog.shared.info("send: \(payload.count) bytes in chunks of \(chunkSize), type=\(writeType == .withoutResponse ? "WR" : "withResp")")
+            writeChar.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+
+        // Use the negotiated MTU rather than a hard-coded 96. Most BLE 4.2+
+        // peripherals expose 100–250 bytes of payload; using more bytes per
+        // write means fewer round-trips and less chance of buffer timeout.
+        let maxLen = peripheral.maximumWriteValueLength(for: writeType)
+        let chunkSize = min(PeripageProtocol.chunkSize, maxLen)
+        DebugLog.shared.info("send: \(total) bytes, chunk=\(chunkSize) (mtu=\(maxLen)), type=\(writeType == .withoutResponse ? "WR" : "withResp")")
+
         while sent < total {
             let end = min(sent + chunkSize, total)
             let chunk = payload[sent..<end]
 
             if writeType == .withResponse {
-                // Await per-write ACK so we never out-run the printer.
                 try await withCheckedThrowingContinuation { (cc: CheckedContinuation<Void, Error>) in
                     self.pendingWriteAck = cc
                     peripheral.writeValue(chunk, for: writeChar, type: .withResponse)
                 }
             } else {
-                // .withoutResponse path: respect CoreBluetooth's flow control
-                // by checking canSendWriteWithoutResponse and waiting for
-                // peripheralIsReady(toSendWriteWithoutResponse:) when needed.
+                // Respect CoreBluetooth's outbound queue. Without this check
+                // iOS silently drops writes once its internal queue is full.
                 if !peripheral.canSendWriteWithoutResponse {
                     await withCheckedContinuation { (cc: CheckedContinuation<Void, Never>) in
                         self.pendingReadyToSend = cc
                     }
                 }
                 peripheral.writeValue(chunk, for: writeChar, type: .withoutResponse)
+                // Small breather between chunks — matches Python's 15ms
+                // asyncio.sleep, gives the printer's UART time to drain.
+                try await Task.sleep(for: PeripageProtocol.interChunkDelay)
             }
 
             sent = end
@@ -76,6 +85,7 @@ public final class PrinterClient: NSObject, PrinterClientProtocol {
             }
         }
         // Settle: real printer needs ~3s to flush its buffer
+        DebugLog.shared.info("send done; waiting 3s for printer to flush")
         try await Task.sleep(for: .seconds(3))
         state = .connected(name: peripheral.name ?? "Peripage")
     }

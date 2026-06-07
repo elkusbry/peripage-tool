@@ -107,19 +107,26 @@ struct PreviewView: View {
     }
 
     private var buttons: some View {
-        HStack {
-            Button("Add to queue") {
-                queue.enqueue(PrintJob(sourceData: sourceData, adjustments: adjustments))
-                dismiss()
-            }.buttonStyle(.bordered)
-
-            Spacer()
-
-            Button("Print now") {
+        VStack(spacing: 10) {
+            Button {
                 queue.enqueue(PrintJob(sourceData: sourceData, adjustments: adjustments))
                 queue.start()
                 dismiss()
-            }.buttonStyle(.borderedProminent)
+            } label: {
+                Label("Print", systemImage: "printer.fill")
+                    .font(.title2.bold())
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+
+            Button("Add to queue") {
+                queue.enqueue(PrintJob(sourceData: sourceData, adjustments: adjustments))
+                dismiss()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
         }
     }
 
@@ -163,21 +170,19 @@ protocol AdjustmentOption: Hashable {
 }
 
 enum BrightnessLevel: String, CaseIterable, AdjustmentOption {
-    case dim, normal, light, bright
+    case dim, normal, bright
 
     var value: Double {
         switch self {
         case .dim:    return 0.8
         case .normal: return 1.0
-        case .light:  return 1.25
-        case .bright: return 1.5
+        case .bright: return 1.4
         }
     }
     var label: String {
         switch self {
         case .dim:    return "Dim"
         case .normal: return "Normal"
-        case .light:  return "Light"
         case .bright: return "Bright"
         }
     }
@@ -185,8 +190,7 @@ enum BrightnessLevel: String, CaseIterable, AdjustmentOption {
         switch self {
         case .dim:    return "sun.min"
         case .normal: return "sun.max"
-        case .light:  return "sun.max.fill"
-        case .bright: return "sun.haze.fill"
+        case .bright: return "sun.max.fill"
         }
     }
     static func from(_ v: Double) -> BrightnessLevel {
@@ -195,14 +199,13 @@ enum BrightnessLevel: String, CaseIterable, AdjustmentOption {
 }
 
 enum ContrastLevel: String, CaseIterable, AdjustmentOption {
-    case soft, normal, bold, punch
+    case soft, normal, bold
 
     var value: Double {
         switch self {
         case .soft:   return 0.9
         case .normal: return 1.2
-        case .bold:   return 1.6
-        case .punch:  return 2.0
+        case .bold:   return 1.7
         }
     }
     var label: String {
@@ -210,15 +213,13 @@ enum ContrastLevel: String, CaseIterable, AdjustmentOption {
         case .soft:   return "Soft"
         case .normal: return "Normal"
         case .bold:   return "Bold"
-        case .punch:  return "Punch"
         }
     }
     var icon: String {
         switch self {
         case .soft:   return "circle.dotted"
         case .normal: return "circle.lefthalf.filled"
-        case .bold:   return "circle.righthalf.filled"
-        case .punch:  return "circle.fill"
+        case .bold:   return "circle.fill"
         }
     }
     static func from(_ v: Double) -> ContrastLevel {
