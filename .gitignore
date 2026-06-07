@@ -20,3 +20,6 @@ ios/Peripage.xcodeproj/
 ios/build/
 ios/DerivedData/
 .DS_Store
+
+# Personal Apple Developer team ID (use developer.xcconfig.template)
+ios/developer.xcconfig

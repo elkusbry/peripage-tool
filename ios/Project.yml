@@ -7,6 +7,10 @@ options:
   developmentLanguage: en
   createIntermediateGroups: true
 
+configFiles:
+  Debug: developer.xcconfig
+  Release: developer.xcconfig
+
 settings:
   base:
     SWIFT_VERSION: "5.10"
