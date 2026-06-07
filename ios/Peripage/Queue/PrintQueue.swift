@@ -91,9 +91,15 @@ public final class PrintQueue {
             try await printer.send(payload, jobId: job.id)
             jobs[i].status = .done
             Haptics.success()
+            // Mimic the Python tool's lifecycle: it opens a fresh
+            // BleakClient per print and the `async with` exit triggers a
+            // clean disconnect. Some Peripage firmwares appear to use BLE
+            // disconnect as the "commit print buffer" signal.
+            await printer.disconnect()
         } catch {
             jobs[i].status = .failed(reason: String(describing: error))
             Haptics.error()
+            await printer.disconnect()
         }
     }
 }

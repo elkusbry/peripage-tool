@@ -244,6 +244,13 @@ extension PrinterClient: CBPeripheralDelegate {
             for ch in service.characteristics ?? [] {
                 let props = Self.describeProperties(ch.properties)
                 DebugLog.shared.info("  Char \(ch.uuid.uuidString) in svc \(service.uuid.uuidString) props=[\(props)]")
+                // Subscribe to every notify characteristic the device offers.
+                // Some firmwares only commit the print buffer once a host is
+                // listening for status; subscribing is cheap insurance.
+                if ch.properties.contains(.notify) {
+                    peripheral.setNotifyValue(true, for: ch)
+                    DebugLog.shared.info("  Subscribing to \(ch.uuid.uuidString)")
+                }
             }
             let targetUUID = CBUUID(string: PeripageProtocol.writeCharacteristicUUIDString)
             let candidates = (service.characteristics ?? []).filter { $0.uuid == targetUUID }
@@ -256,8 +263,36 @@ extension PrinterClient: CBPeripheralDelegate {
                 self.state = .connected(name: peripheral.name ?? "Peripage")
                 self.pendingConnect?.resume(); self.pendingConnect = nil
                 let propStr = Self.describeProperties(ch.properties)
+                let mtuWR = peripheral.maximumWriteValueLength(for: .withoutResponse)
+                let mtuW = peripheral.maximumWriteValueLength(for: .withResponse)
                 DebugLog.shared.info("Selected write char \(ch.uuid.uuidString) in svc \(service.uuid.uuidString) props=[\(propStr)]")
+                DebugLog.shared.info("Negotiated MTU: writeNR=\(mtuWR) write=\(mtuW)")
             }
+        }
+    }
+
+    nonisolated public func peripheral(_ peripheral: CBPeripheral,
+                                       didUpdateNotificationStateFor characteristic: CBCharacteristic,
+                                       error: Error?) {
+        let uuid = characteristic.uuid.uuidString
+        let enabled = characteristic.isNotifying
+        let desc = error?.localizedDescription
+        Task { @MainActor in
+            if let desc {
+                DebugLog.shared.warn("notify \(uuid) error: \(desc)")
+            } else {
+                DebugLog.shared.info("notify \(uuid) → \(enabled ? "ON" : "OFF")")
+            }
+        }
+    }
+
+    nonisolated public func peripheral(_ peripheral: CBPeripheral,
+                                       didUpdateValueFor characteristic: CBCharacteristic,
+                                       error: Error?) {
+        let uuid = characteristic.uuid.uuidString
+        let bytes = characteristic.value.map { $0.map { String(format: "%02x", $0) }.joined(separator: " ") } ?? "(nil)"
+        Task { @MainActor in
+            DebugLog.shared.info("notify \(uuid) → \(bytes)")
         }
     }
 
