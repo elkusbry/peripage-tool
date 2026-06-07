@@ -66,10 +66,13 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.elkus.peripage.share
         INFOPLIST_FILE: PeripageShare/Info.plist
         CODE_SIGN_ENTITLEMENTS: PeripageShare/PeripageShare.entitlements
-        ENABLE_HARDENED_RUNTIME: YES
-        ENABLE_APP_SANDBOX: YES
         SWIFT_VERSION: "5.10"
         IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        # ENABLE_APP_SANDBOX + ENABLE_HARDENED_RUNTIME are macOS-only;
+        # leaving them on (inherited from the project base) can quietly
+        # block iOS app-extension embedding. Force them off here.
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: NO
 
   PeripageTests:
     type: bundle.unit-test
