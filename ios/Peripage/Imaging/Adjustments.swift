@@ -30,7 +30,7 @@ public struct Adjustments: Equatable, Codable, Sendable {
         brightness: Double = 1.0,
         contrast: Double = 1.2,
         topMarginPx: Int = 40,
-        bottomMarginPx: Int = 120,
+        bottomMarginPx: Int = 40,
         rotation: Rotation = .auto
     ) {
         self.brightness = brightness
