@@ -114,9 +114,9 @@ struct PreviewView: View {
                 dismiss()
             } label: {
                 Label("Print", systemImage: "printer.fill")
-                    .font(.title2.bold())
+                    .font(.headline)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
+                    .padding(.vertical, 6)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
