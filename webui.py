@@ -30,6 +30,11 @@ except ImportError:
 from print_photo import (
     find_printer,
     send_payload,
+    CMD_START_A,
+    CMD_START_B,
+    CMD_END,
+    LEADING_SILENCE_BYTES,
+    TRAILING_FEED_PX,
 )
 from bleak import BleakClient
 
@@ -101,7 +106,11 @@ def render_for_print(s: State) -> Image.Image:
 
 def encode_and_payload(img: Image.Image, width_dots: int,
                        top: int, bottom: int) -> bytes:
-    """Width-agnostic version of print_photo's encode + build_payload."""
+    """Width-agnostic encode + build_payload using the post-2026-06-07
+    firmware byte format. The `top` and `bottom` args are accepted for
+    backwards compat with the UI sliders but ignored — the new firmware
+    uses a fixed 1024-byte leading silence and a fixed 96-pixel
+    trailing feed. See docs/runbooks/peripage-protocol-change.md."""
     row_bytes = width_dots // 8
     width, height = img.size
     assert width == width_dots, f"width {width} != {width_dots}"
@@ -109,27 +118,18 @@ def encode_and_payload(img: Image.Image, width_dots: int,
     assert len(raw) == row_bytes * height
     image_bytes = bytes(b ^ 0xFF for b in raw)
 
-    parts = [bytes.fromhex("1011fffe01")]  # reset
+    xL, xH = row_bytes & 0xFF, (row_bytes >> 8) & 0xFF
+    yL, yH = height & 0xFF, (height >> 8) & 0xFF
 
-    def feed(n: int):
-        while n > 0:
-            k = min(n, 255)
-            parts.append(bytes([0x1B, 0x4A, k]))
-            n -= k
-
-    feed(top)
-    ROWS_PER_BLOCK = 256
-    rows_sent = 0
-    while rows_sent < height:
-        rows_in_block = min(ROWS_PER_BLOCK, height - rows_sent)
-        xL, xH = row_bytes & 0xFF, (row_bytes >> 8) & 0xFF
-        yL, yH = rows_in_block & 0xFF, (rows_in_block >> 8) & 0xFF
-        parts.append(bytes([0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH]))
-        start = rows_sent * row_bytes
-        parts.append(image_bytes[start:start + rows_in_block * row_bytes])
-        rows_sent += rows_in_block
-    feed(bottom)
-    parts.append(bytes.fromhex("1011fffe01"))
+    parts = [
+        CMD_START_A,
+        CMD_START_B,
+        b"\x00" * LEADING_SILENCE_BYTES,
+        bytes([0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH]),
+        image_bytes,
+        bytes([0x1B, 0x4A, TRAILING_FEED_PX]),
+        CMD_END,
+    ]
     return b"".join(parts)
 
 

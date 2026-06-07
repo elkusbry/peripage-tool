@@ -1,6 +1,6 @@
 width=576
 height=576
 raster_len=41472
-payload_len=41512
+payload_len=42520
 row_bytes=72
 print_width_px=576
