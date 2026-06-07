@@ -9,7 +9,6 @@ struct HomeView: View {
     @State private var pickedData: Data?
     @State private var showDebug = false
     @State private var showQueue = false
-    @State private var showCapture = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -39,15 +38,6 @@ struct HomeView: View {
                 }
             }
 
-            Button {
-                showCapture = true
-            } label: {
-                Label("BLE Capture", systemImage: "dot.radiowaves.left.and.right")
-                    .font(.caption)
-            }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
-
             Spacer()
 
             LogTail()
@@ -65,7 +55,6 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showQueue) { QueueView() }
         .sheet(isPresented: $showDebug) { DebugLogView() }
-        .sheet(isPresented: $showCapture) { CaptureView() }
         .task(id: photoItem) {
             guard let photoItem else { return }
             pickedData = try? await photoItem.loadTransferable(type: Data.self)

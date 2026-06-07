@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DebugLogView: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var showCapture = false
     private let log = DebugLog.shared
 
     var body: some View {
@@ -23,7 +24,15 @@ struct DebugLogView: View {
                 ToolbarItem {
                     ShareLink(item: log.renderText()) { Image(systemName: "square.and.arrow.up") }
                 }
+                ToolbarItem {
+                    Button {
+                        showCapture = true
+                    } label: {
+                        Image(systemName: "dot.radiowaves.left.and.right")
+                    }
+                }
             }
+            .sheet(isPresented: $showCapture) { CaptureView() }
         }
     }
 }
