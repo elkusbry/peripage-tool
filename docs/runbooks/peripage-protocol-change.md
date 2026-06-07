@@ -127,7 +127,7 @@ but headers + tails match, the **leading silence** length or
 
 ## 3. Update the protocol
 
-The change must land in **two places**, kept in lockstep:
+The change must land in **three places**, kept in lockstep:
 
 ### 3.1 `print_photo.py` — source of truth
 
@@ -145,7 +145,26 @@ TRAILING_FEED_PX = 96
 Then update `build_payload()` to assemble the new wrapper. The body
 (`GS v 0` raster command + pixel bytes) is unchanged.
 
-### 3.2 `ios/Peripage/Protocol/PeripageProtocol.swift` — Swift mirror
+### 3.2 `webui.py` — keep imports current
+
+`webui.py` has its own inlined copy of the wrapper assembly (see
+`encode_and_payload`). It imports the protocol constants from
+`print_photo.py` — so if you update the constants in `print_photo.py`,
+make sure the `from print_photo import ...` line in `webui.py` pulls
+in any newly-added names, and that `encode_and_payload`'s `parts = [...]`
+list matches the structure in `build_payload`.
+
+> ⚠️ This bit me on 2026-06-07: I updated `print_photo.build_payload`
+> but didn't realize the web UI had its own copy of the wrapper bytes.
+> The web UI silently kept printing the old format. Always grep for
+> `1011fffe01` or whatever the old reset bytes were, across the whole
+> repo, to find stragglers.
+>
+> ```bash
+> grep -rn "1011fffe01" --include="*.py" --include="*.swift"
+> ```
+
+### 3.3 `ios/Peripage/Protocol/PeripageProtocol.swift` — Swift mirror
 
 Update the constants:
 
