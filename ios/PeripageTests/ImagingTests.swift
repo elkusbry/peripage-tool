@@ -23,18 +23,18 @@ struct ImagingTests {
         #expect(resolved == .deg90)
     }
 
-    @Test("Auto rotation: portrait source rotates 90°")
+    @Test("Auto rotation: portrait source stays at 0°")
     func autoPortrait() throws {
         let png = try Self.data("portrait_300x400.png")
         let resolved = try ImageProcessor.resolveRotation(.auto, for: png)
-        #expect(resolved == .deg90)
+        #expect(resolved == .deg0)
     }
 
-    @Test("Auto rotation: square source rotates 90°")
+    @Test("Auto rotation: square source stays at 0°")
     func autoSquare() throws {
         let png = try Self.data("flat_gray_64x64.png")
         let resolved = try ImageProcessor.resolveRotation(.auto, for: png)
-        #expect(resolved == .deg90)
+        #expect(resolved == .deg0)
     }
 
     @Test("Explicit rotation passes through")
@@ -55,12 +55,12 @@ struct ImagingTests {
         #expect(result.height >= 760 && result.height <= 776)
     }
 
-    @Test("process() rotates portrait 90° → short output (~432 rows)")
+    @Test("process() keeps portrait at 0° → tall output (~768 rows)")
     func processPortraitSize() throws {
         let png = try Self.data("portrait_300x400.png")
         let result = try ImageProcessor.process(png, adjustments: .default)
-        // Portrait 300×400 → rotate 90° CW → 400×300 → scale to width 576 → 432 tall.
-        #expect(result.height >= 425 && result.height <= 440)
+        // Portrait 300×400 stays portrait → scale to width 576 → 768 tall.
+        #expect(result.height >= 760 && result.height <= 776)
     }
 
     @Test("process() inverts bits (default mid-gray dithers to ~50% black)")

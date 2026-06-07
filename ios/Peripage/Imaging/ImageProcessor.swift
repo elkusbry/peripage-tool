@@ -21,14 +21,15 @@ public enum ImageProcessor {
     // MARK: - Auto rotation
 
     /// Resolve `.auto` against the image's EXIF-corrected orientation.
-    /// Every photo gets rotated 90° clockwise — both landscape and
-    /// portrait — so the original "top" of the image becomes the right
-    /// edge of the printed strip. Override per-photo via the Rotation
-    /// picker on PreviewView if a different orientation is wanted.
+    /// Landscape sources rotate 90° clockwise so their long axis runs
+    /// down the receipt strip; portrait (or square) sources stay at 0°
+    /// so they print in their natural viewing orientation. Either way
+    /// the long axis ends up down-strip. Override per-photo via the
+    /// Rotation picker on PreviewView.
     public static func resolveRotation(_ rotation: Rotation, for imageData: Data) throws -> Rotation {
         if rotation != .auto { return rotation }
-        _ = try orientedSize(of: imageData)   // still validates the image decodes
-        return .deg90
+        let size = try orientedSize(of: imageData)
+        return size.width > size.height ? .deg90 : .deg0
     }
 
     /// Decode the image's pixel size *after* applying EXIF orientation.
@@ -62,10 +63,10 @@ public enum ImageProcessor {
         // 1. EXIF-correct the raw bitmap
         let oriented = try orientedCopy(of: raw, sourceData: data)
 
-        // 2. Resolve rotation. Auto: always 90° clockwise (both landscape
-        // and portrait sources). Manual override comes through unchanged.
+        // 2. Resolve rotation. Auto: landscape sources rotate 90° clockwise,
+        // portrait/square stay at 0°. Manual override comes through unchanged.
         let resolvedRotation: Rotation = adjustments.rotation == .auto
-            ? .deg90
+            ? (oriented.width > oriented.height ? .deg90 : .deg0)
             : adjustments.rotation
         let rotated = rotate(oriented, by: resolvedRotation)
 
