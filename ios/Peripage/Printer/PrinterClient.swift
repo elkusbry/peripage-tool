@@ -16,6 +16,8 @@ public final class PrinterClient: NSObject, PrinterClientProtocol {
     private var pendingPowerOn: CheckedContinuation<Void, Error>?
     private var pendingScan: CheckedContinuation<CBPeripheral, Error>?
     private var pendingConnect: CheckedContinuation<Void, Error>?
+    private var pendingReadyToSend: CheckedContinuation<Void, Never>?
+    private var pendingWriteAck: CheckedContinuation<Void, Error>?
 
     private var scanTimer: Task<Void, Never>?
 
@@ -38,19 +40,40 @@ public final class PrinterClient: NSObject, PrinterClientProtocol {
         let total = payload.count
         var sent = 0
         let chunkSize = PeripageProtocol.chunkSize
+        // PREFER .withResponse when supported: CoreBluetooth doesn't reliably
+        // backpressure .withoutResponse on iOS — excess writes are silently
+        // dropped once its internal queue is full. .withResponse waits for the
+        // ATT-level write response, which is genuine end-to-end delivery.
         let writeType: CBCharacteristicWriteType =
-            writeChar.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+            writeChar.properties.contains(.write) ? .withResponse : .withoutResponse
         DebugLog.shared.info("send: \(payload.count) bytes in chunks of \(chunkSize), type=\(writeType == .withoutResponse ? "WR" : "withResp")")
         while sent < total {
             let end = min(sent + chunkSize, total)
             let chunk = payload[sent..<end]
-            peripheral.writeValue(chunk, for: writeChar, type: writeType)
+
+            if writeType == .withResponse {
+                // Await per-write ACK so we never out-run the printer.
+                try await withCheckedThrowingContinuation { (cc: CheckedContinuation<Void, Error>) in
+                    self.pendingWriteAck = cc
+                    peripheral.writeValue(chunk, for: writeChar, type: .withResponse)
+                }
+            } else {
+                // .withoutResponse path: respect CoreBluetooth's flow control
+                // by checking canSendWriteWithoutResponse and waiting for
+                // peripheralIsReady(toSendWriteWithoutResponse:) when needed.
+                if !peripheral.canSendWriteWithoutResponse {
+                    await withCheckedContinuation { (cc: CheckedContinuation<Void, Never>) in
+                        self.pendingReadyToSend = cc
+                    }
+                }
+                peripheral.writeValue(chunk, for: writeChar, type: .withoutResponse)
+            }
+
             sent = end
             state = .sending(jobId: jobId, progress: Double(sent) / Double(total))
             if (sent / chunkSize) % 16 == 0 || sent == total {
                 DebugLog.shared.info("  sent \(sent)/\(total) (\(Int(Double(sent) * 100 / Double(total)))%)")
             }
-            try await Task.sleep(for: PeripageProtocol.interChunkDelay)
         }
         // Settle: real printer needs ~3s to flush its buffer
         try await Task.sleep(for: .seconds(3))
@@ -224,6 +247,36 @@ extension PrinterClient: CBPeripheralDelegate {
                 self.pendingConnect?.resume(); self.pendingConnect = nil
                 let propStr = Self.describeProperties(ch.properties)
                 DebugLog.shared.info("Selected write char \(ch.uuid.uuidString) in svc \(service.uuid.uuidString) props=[\(propStr)]")
+            }
+        }
+    }
+
+    /// Called when a `.withResponse` write completes (ACK or error from the peripheral).
+    nonisolated public func peripheral(_ peripheral: CBPeripheral,
+                                       didWriteValueFor characteristic: CBCharacteristic,
+                                       error: Error?) {
+        let desc = error?.localizedDescription
+        Task { @MainActor in
+            if let cc = self.pendingWriteAck {
+                self.pendingWriteAck = nil
+                if let desc {
+                    DebugLog.shared.error("write error: \(desc)")
+                    cc.resume(throwing: BLEError.writeFailed(description: desc))
+                } else {
+                    cc.resume()
+                }
+            }
+        }
+    }
+
+    /// CoreBluetooth invokes this when its `.withoutResponse` send queue has
+    /// drained enough to accept more writes — the canSendWriteWithoutResponse
+    /// signal we need for proper backpressure.
+    nonisolated public func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
+        Task { @MainActor in
+            if let cc = self.pendingReadyToSend {
+                self.pendingReadyToSend = nil
+                cc.resume()
             }
         }
     }
