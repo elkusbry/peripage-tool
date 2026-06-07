@@ -39,6 +39,10 @@ struct HomeView: View {
             }
 
             Spacer()
+
+            LogTail()
+                .padding(.horizontal)
+                .padding(.bottom, 8)
         }
         .padding()
         .navigationDestination(isPresented: Binding(
@@ -54,6 +58,31 @@ struct HomeView: View {
         .task(id: photoItem) {
             guard let photoItem else { return }
             pickedData = try? await photoItem.loadTransferable(type: Data.self)
+        }
+    }
+}
+
+private struct LogTail: View {
+    @State private var entries: [LogEntry] = []
+    private let log = DebugLog.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(entries.suffix(3)) { e in
+                Text("\(e.level.rawValue.uppercased()) \(e.message)")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(e.level == .error ? .red : .secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .task {
+            // Poll the log every 250ms — cheap, no Observation setup needed for a fixed-size buffer.
+            while !Task.isCancelled {
+                entries = log.entries
+                try? await Task.sleep(for: .milliseconds(250))
+            }
         }
     }
 }

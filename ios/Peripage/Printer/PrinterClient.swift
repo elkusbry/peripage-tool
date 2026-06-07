@@ -38,12 +38,18 @@ public final class PrinterClient: NSObject, PrinterClientProtocol {
         let total = payload.count
         var sent = 0
         let chunkSize = PeripageProtocol.chunkSize
+        let writeType: CBCharacteristicWriteType =
+            writeChar.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+        DebugLog.shared.info("send: \(payload.count) bytes in chunks of \(chunkSize), type=\(writeType == .withoutResponse ? "WR" : "withResp")")
         while sent < total {
             let end = min(sent + chunkSize, total)
             let chunk = payload[sent..<end]
-            peripheral.writeValue(chunk, for: writeChar, type: .withoutResponse)
+            peripheral.writeValue(chunk, for: writeChar, type: writeType)
             sent = end
             state = .sending(jobId: jobId, progress: Double(sent) / Double(total))
+            if (sent / chunkSize) % 16 == 0 || sent == total {
+                DebugLog.shared.info("  sent \(sent)/\(total) (\(Int(Double(sent) * 100 / Double(total)))%)")
+            }
             try await Task.sleep(for: PeripageProtocol.interChunkDelay)
         }
         // Settle: real printer needs ~3s to flush its buffer
@@ -56,6 +62,17 @@ public final class PrinterClient: NSObject, PrinterClientProtocol {
         peripheral = nil
         writeChar = nil
         state = .disconnected
+    }
+
+    private static func describeProperties(_ p: CBCharacteristicProperties) -> String {
+        var parts: [String] = []
+        if p.contains(.read)                  { parts.append("read") }
+        if p.contains(.write)                 { parts.append("write") }
+        if p.contains(.writeWithoutResponse)  { parts.append("writeNR") }
+        if p.contains(.notify)                { parts.append("notify") }
+        if p.contains(.indicate)              { parts.append("indicate") }
+        if p.contains(.broadcast)             { parts.append("broadcast") }
+        return parts.joined(separator: ",")
     }
 }
 
@@ -132,7 +149,9 @@ extension PrinterClient: CBCentralManagerDelegate {
                                            advertisementData: [String : Any], rssi RSSI: NSNumber) {
         let name = peripheral.name ?? (advertisementData[CBAdvertisementDataLocalNameKey] as? String) ?? ""
         guard name.lowercased().contains(PeripageProtocol.nameNamePrefix.lowercased()) else { return }
+        let rssi = RSSI.intValue
         Task { @MainActor in
+            DebugLog.shared.info("Discovered \(name) rssi=\(rssi)")
             guard let cc = self.pendingScan else { return }
             self.pendingScan = nil
             self.scanTimer?.cancel(); self.scanTimer = nil
@@ -144,13 +163,16 @@ extension PrinterClient: CBCentralManagerDelegate {
 
     nonisolated public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         Task { @MainActor in
+            DebugLog.shared.info("Connected to \(peripheral.name ?? "?"), discovering services…")
             peripheral.discoverServices(nil)
         }
     }
 
     nonisolated public func centralManager(_ central: CBCentralManager,
                                            didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        let desc = error?.localizedDescription ?? "no error"
         Task { @MainActor in
+            DebugLog.shared.error("didFailToConnect: \(desc)")
             let e = BLEError.writeFailed(description: error?.localizedDescription ?? "didFailToConnect")
             self.state = .error(e)
             self.pendingConnect?.resume(throwing: e); self.pendingConnect = nil
@@ -159,7 +181,9 @@ extension PrinterClient: CBCentralManagerDelegate {
 
     nonisolated public func centralManager(_ central: CBCentralManager,
                                            didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        let desc = error?.localizedDescription ?? "clean"
         Task { @MainActor in
+            DebugLog.shared.warn("Disconnected: \(desc)")
             self.peripheral = nil
             self.writeChar = nil
             if case .sending = self.state {
@@ -175,6 +199,7 @@ extension PrinterClient: CBPeripheralDelegate {
     nonisolated public func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         Task { @MainActor in
             for service in peripheral.services ?? [] {
+                DebugLog.shared.info("Discovered service: \(service.uuid.uuidString)")
                 peripheral.discoverCharacteristics(nil, for: service)
             }
         }
@@ -183,12 +208,22 @@ extension PrinterClient: CBPeripheralDelegate {
     nonisolated public func peripheral(_ peripheral: CBPeripheral,
                                        didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         Task { @MainActor in
+            for ch in service.characteristics ?? [] {
+                let props = Self.describeProperties(ch.properties)
+                DebugLog.shared.info("  Char \(ch.uuid.uuidString) in svc \(service.uuid.uuidString) props=[\(props)]")
+            }
             let targetUUID = CBUUID(string: PeripageProtocol.writeCharacteristicUUIDString)
-            if let ch = service.characteristics?.first(where: { $0.uuid == targetUUID }) {
+            let candidates = (service.characteristics ?? []).filter { $0.uuid == targetUUID }
+            let writable = candidates.first {
+                $0.properties.contains(.writeWithoutResponse) || $0.properties.contains(.write)
+            }
+            // Only pick once across the whole connection — don't let a later (config) service overwrite a good earlier pick.
+            if let ch = writable, self.writeChar == nil {
                 self.writeChar = ch
                 self.state = .connected(name: peripheral.name ?? "Peripage")
                 self.pendingConnect?.resume(); self.pendingConnect = nil
-                DebugLog.shared.info("Write characteristic ready")
+                let propStr = Self.describeProperties(ch.properties)
+                DebugLog.shared.info("Selected write char \(ch.uuid.uuidString) in svc \(service.uuid.uuidString) props=[\(propStr)]")
             }
         }
     }
