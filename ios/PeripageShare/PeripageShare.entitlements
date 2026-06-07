@@ -2,9 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>com.apple.security.app-sandbox</key>
-  <true/>
-  <key>com.apple.security.device.bluetooth</key>
-  <true/>
+  <!--
+    iOS app extensions don't use macOS App Sandbox entitlements. The
+    keys com.apple.security.app-sandbox and com.apple.security.device.
+    bluetooth caused iOS to silently refuse to load this extension at
+    runtime — Photos saw the extension registered but never instantiated
+    it, so it never appeared in the share sheet or Edit Actions.
+
+    Bluetooth on iOS is gated by NSBluetoothAlwaysUsageDescription in
+    Info.plist (which is set). No iOS-side entitlement needed.
+  -->
 </dict>
 </plist>
