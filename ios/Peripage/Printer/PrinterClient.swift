@@ -11,6 +11,8 @@ public final class PrinterClient: NSObject, PrinterClientProtocol {
     private var central: CBCentralManager!
     private var peripheral: CBPeripheral?
     private var writeChar: CBCharacteristic?
+    private var pendingNotifyCount: Int = 0
+    private var connectReadyFired: Bool = false
 
     // Pending continuations
     private var pendingPowerOn: CheckedContinuation<Void, Error>?
@@ -28,9 +30,28 @@ public final class PrinterClient: NSObject, PrinterClientProtocol {
 
     public func ensureConnected() async throws {
         if case .connected = state { return }
+        connectReadyFired = false
+        pendingNotifyCount = 0
         try await waitForPowerOn()
         let p = try await scanForPeripheral()
         try await connect(to: p)
+    }
+
+    /// Resume the connect continuation when all expected notify
+    /// subscriptions have confirmed AND the write characteristic is
+    /// known. A 2s safety timer fires the same resume if the device is
+    /// slow to ack any subscription — better to print with one missing
+    /// notify than to hang forever.
+    private func tryFireConnectReady() {
+        guard !connectReadyFired,
+              writeChar != nil,
+              pendingNotifyCount <= 0,
+              let cc = pendingConnect
+        else { return }
+        connectReadyFired = true
+        pendingConnect = nil
+        DebugLog.shared.info("Connection settled — notifies subscribed, ready to send")
+        cc.resume()
     }
 
     public func send(_ payload: Data, jobId: UUID) async throws {
@@ -244,10 +265,13 @@ extension PrinterClient: CBPeripheralDelegate {
             for ch in service.characteristics ?? [] {
                 let props = Self.describeProperties(ch.properties)
                 DebugLog.shared.info("  Char \(ch.uuid.uuidString) in svc \(service.uuid.uuidString) props=[\(props)]")
-                // Subscribe to every notify characteristic the device offers.
-                // Some firmwares only commit the print buffer once a host is
-                // listening for status; subscribing is cheap insurance.
+                // Subscribe to every notify characteristic. Some firmwares
+                // (this Peripage variant included) won't honour print
+                // commands until they observe a subscriber on their status
+                // channel — we wait for these to confirm before declaring
+                // the connection ready to send.
                 if ch.properties.contains(.notify) {
+                    self.pendingNotifyCount += 1
                     peripheral.setNotifyValue(true, for: ch)
                     DebugLog.shared.info("  Subscribing to \(ch.uuid.uuidString)")
                 }
@@ -261,12 +285,23 @@ extension PrinterClient: CBPeripheralDelegate {
             if let ch = writable, self.writeChar == nil {
                 self.writeChar = ch
                 self.state = .connected(name: peripheral.name ?? "Peripage")
-                self.pendingConnect?.resume(); self.pendingConnect = nil
                 let propStr = Self.describeProperties(ch.properties)
                 let mtuWR = peripheral.maximumWriteValueLength(for: .withoutResponse)
                 let mtuW = peripheral.maximumWriteValueLength(for: .withResponse)
                 DebugLog.shared.info("Selected write char \(ch.uuid.uuidString) in svc \(service.uuid.uuidString) props=[\(propStr)]")
                 DebugLog.shared.info("Negotiated MTU: writeNR=\(mtuWR) write=\(mtuW)")
+                // Safety net: if any notify subscription is slow to ack,
+                // resume the connect after 2s anyway.
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(2))
+                    guard let self else { return }
+                    if !self.connectReadyFired {
+                        DebugLog.shared.warn("Notify subscribe timeout — proceeding anyway")
+                        self.pendingNotifyCount = 0
+                        self.tryFireConnectReady()
+                    }
+                }
+                self.tryFireConnectReady()
             }
         }
     }
@@ -282,6 +317,10 @@ extension PrinterClient: CBPeripheralDelegate {
                 DebugLog.shared.warn("notify \(uuid) error: \(desc)")
             } else {
                 DebugLog.shared.info("notify \(uuid) → \(enabled ? "ON" : "OFF")")
+            }
+            if enabled {
+                self.pendingNotifyCount -= 1
+                self.tryFireConnectReady()
             }
         }
     }
