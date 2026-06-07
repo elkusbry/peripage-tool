@@ -1,5 +1,13 @@
 # Peripage App Changelog
 
+## 0.2.0 — 2026-06-07
+
+- iOS Share Extension: "Print to Peripage" in any app's share sheet for `public.image` items
+- Reuses the host app's `ImageProcessor` + `PeripageProtocol` so print output is byte-identical
+- Single-photo flow inside the share sheet: live preview, all four sliders, rotation, Print
+- Failure paths surface a "Try again" / "Cancel" choice instead of dumping a stack trace
+- Known limitation: very tall photos may exceed the extension's runtime budget; follow-up tracks an App Group hand-off to the host app
+
 ## 0.1.0 — 2026-06-05
 
 - Initial release of Peripage iOS + macOS app
