@@ -26,11 +26,22 @@
   <dict>
     <key>NSExtensionAttributes</key>
     <dict>
+      <!--
+        Predicate-string activation rule so Photos.app's "Photo Selected"
+        mode (which sends a PHAsset wrapper, not raw public.image data)
+        also matches. Accepts any extension item that has at least one
+        attachment conforming to public.image.
+      -->
       <key>NSExtensionActivationRule</key>
-      <dict>
-        <key>NSExtensionActivationSupportsImageWithMaxCount</key>
-        <integer>1</integer>
-      </dict>
+      <string>SUBQUERY(
+        extensionItems,
+        $extensionItem,
+        SUBQUERY(
+          $extensionItem.attachments,
+          $attachment,
+          ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.image"
+        ).@count &gt;= 1
+      ).@count &gt;= 1</string>
     </dict>
     <key>NSExtensionPointIdentifier</key>
     <string>com.apple.share-services</string>
