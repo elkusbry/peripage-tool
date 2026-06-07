@@ -48,7 +48,16 @@ ROW_BYTES = PRINT_WIDTH_PX // 8       # 72 bytes per row, 1bpp MSB-first
 CHUNK_SIZE = 96
 ROWS_PER_BLOCK = 256                  # send image as multiple GS v 0 blocks
 
-CMD_RESET = bytes.fromhex("1011fffe01")
+# --- New protocol (post-firmware-update) ---
+# Captured 2026-06-07 from the official Peripage iOS app via PacketLogger
+# on a PeriPage+064E_BLE unit. The old CMD_RESET=10 11 FF FE 01 no longer
+# triggers a print; the firmware now expects this START/END pair plus a
+# raw zero-byte leading silence (NOT ESC J n) and one big GS v 0 block.
+CMD_START_A = bytes.fromhex("10ff100001")    # session init
+CMD_START_B = bytes.fromhex("10fffe01")      # ready / clear buffer
+CMD_END     = bytes.fromhex("10fffe45")      # commit and print
+LEADING_SILENCE_BYTES = 1024                 # raw 0x00 before the raster
+TRAILING_FEED_PX = 96                        # fixed ESC J 96 after raster
 
 
 async def find_printer(timeout: float = 8.0) -> str | None:
@@ -102,42 +111,27 @@ def encode_image_to_bytes(img: Image.Image) -> bytes:
 
 
 def build_payload(image_bytes: bytes, height: int,
-                  leading_feed: int, trailing_feed: int) -> bytes:
-    """Build the full byte stream: reset, top feed, image blocks, bottom feed, reset."""
-    parts = [CMD_RESET]
+                  leading_feed: int = 0, trailing_feed: int = 0) -> bytes:
+    """Build the byte stream for the post-update firmware:
 
-    if leading_feed > 0:
-        feed_left = leading_feed
-        while feed_left > 0:
-            n = min(feed_left, 255)
-            parts.append(bytes([0x1B, 0x4A, n]))
-            feed_left -= n
+      CMD_START_A | CMD_START_B | <1024 zero bytes> | GS v 0 raster | ESC J 96 | CMD_END
 
-    # Send image as multiple GS v 0 blocks of <= ROWS_PER_BLOCK rows each.
-    rows_sent = 0
-    blocks = 0
-    while rows_sent < height:
-        rows_in_block = min(ROWS_PER_BLOCK, height - rows_sent)
-        xL, xH = ROW_BYTES & 0xFF, (ROW_BYTES >> 8) & 0xFF
-        yL, yH = rows_in_block & 0xFF, (rows_in_block >> 8) & 0xFF
-        parts.append(bytes([0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH]))
-
-        start = rows_sent * ROW_BYTES
-        end = start + (rows_in_block * ROW_BYTES)
-        parts.append(image_bytes[start:end])
-
-        rows_sent += rows_in_block
-        blocks += 1
-    print(f"  Image split into {blocks} block(s) of <= {ROWS_PER_BLOCK} rows.")
-
-    if trailing_feed > 0:
-        feed_left = trailing_feed
-        while feed_left > 0:
-            n = min(feed_left, 255)
-            parts.append(bytes([0x1B, 0x4A, n]))
-            feed_left -= n
-
-    parts.append(CMD_RESET)
+    The leading_feed/trailing_feed args are kept for CLI compatibility but
+    ignored — the new firmware uses a fixed leading silence (1024 zero
+    bytes, not ESC J) and a fixed 96-pixel trailing feed.
+    """
+    xL, xH = ROW_BYTES & 0xFF, (ROW_BYTES >> 8) & 0xFF
+    yL, yH = height & 0xFF, (height >> 8) & 0xFF
+    parts = [
+        CMD_START_A,
+        CMD_START_B,
+        b"\x00" * LEADING_SILENCE_BYTES,
+        bytes([0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH]),
+        image_bytes,
+        bytes([0x1B, 0x4A, TRAILING_FEED_PX]),
+        CMD_END,
+    ]
+    print(f"  Image: 1 raster block of {height} rows (no split).")
     return b"".join(parts)
 
 
