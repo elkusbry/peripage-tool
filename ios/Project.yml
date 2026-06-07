@@ -37,10 +37,35 @@ targets:
       configs:
         Debug:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+    dependencies:
+      - target: PeripageShare
+        embed: true
+        platformFilter: iOS
     scheme:
       testTargets:
         - PeripageTests
       gatherCoverageData: false
+
+  PeripageShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - PeripageShare
+      - path: Peripage/Protocol
+      - path: Peripage/Imaging
+      - path: Peripage/Printer
+      - path: Peripage/Queue
+      - path: Peripage/App/DebugLog.swift
+      - path: Peripage/App/Haptics.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.elkus.peripage.share
+        INFOPLIST_FILE: PeripageShare/Info.plist
+        CODE_SIGN_ENTITLEMENTS: PeripageShare/PeripageShare.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_APP_SANDBOX: YES
+        SWIFT_VERSION: "5.10"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
 
   PeripageTests:
     type: bundle.unit-test
