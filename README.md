@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/screenshots/app-icon.png" alt="Peripage tool app icon" width="160">
+</p>
+
 # peripage-tool
 
 Print photos to a **Peripage A6** thermal printer (the 576-dot, BLE-only
@@ -18,13 +22,17 @@ for the methodology if the firmware ever shifts again.
 
 ## Screenshots
 
-| Web UI | iOS — Home | iOS — Preview | iOS — Share Sheet |
-|---|---|---|---|
-| ![Web UI](docs/screenshots/web-ui.png) | ![iOS Home](docs/screenshots/ios-home.png) | ![iOS Preview](docs/screenshots/ios-preview.png) | ![iOS Share Sheet](docs/screenshots/ios-share.png) |
+**iOS**
 
-> The iOS app and Mac target ship from the same Xcode project — see
-> [`ios/Project.yml`](ios/Project.yml). A Mac screenshot will land in
-> [`docs/screenshots/mac-app.png`](docs/screenshots/) once captured.
+| Home | Preview | Share Sheet |
+|---|---|---|
+| ![iOS Home](docs/screenshots/ios-home.png) | ![iOS Preview](docs/screenshots/ios-preview.png) | ![iOS Share Sheet](docs/screenshots/ios-share.png) |
+
+**Mac + Web**
+
+| Mac — Home | Mac — Preview | Web UI |
+|---|---|---|
+| ![Mac Home](docs/screenshots/mac-home.png) | ![Mac Preview](docs/screenshots/mac-preview.png) | ![Web UI](docs/screenshots/web-ui.png) |
 
 ## I just want to print a photo (no coding background)
 
