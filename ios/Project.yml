@@ -59,6 +59,7 @@ targets:
       - path: Peripage/Imaging
       - path: Peripage/Printer
       - path: Peripage/Queue
+      - path: Peripage/SharedUI
       - path: Peripage/App/DebugLog.swift
       - path: Peripage/App/Haptics.swift
     settings:

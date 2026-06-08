@@ -83,16 +83,25 @@ struct ShareRootView: View {
                 previewPane
                     .frame(maxWidth: .infinity, minHeight: 240, maxHeight: 320)
 
-                slider("Brightness", value: $adjustments.brightness, range: 0.5...2.0, step: 0.05)
-                slider("Contrast",   value: $adjustments.contrast,   range: 0.5...2.0, step: 0.05)
-                intSlider("Top",    value: $adjustments.topMarginPx,    range: 0...300, step: 5)
-                intSlider("Bottom", value: $adjustments.bottomMarginPx, range: 0...300, step: 5)
-
-                HStack {
-                    Text("Rotation").frame(width: 100, alignment: .leading)
-                    Picker("", selection: $adjustments.rotation) {
-                        ForEach(Rotation.allCases, id: \.self) { r in Text(r.label).tag(r) }
-                    }.pickerStyle(.segmented)
+                VStack(spacing: 20) {
+                    AdjustmentButtonGroup(
+                        title: "Brightness",
+                        options: BrightnessLevel.allCases,
+                        isSelected: { BrightnessLevel.from(adjustments.brightness) == $0 },
+                        onSelect: { adjustments.brightness = $0.value }
+                    )
+                    AdjustmentButtonGroup(
+                        title: "Contrast",
+                        options: ContrastLevel.allCases,
+                        isSelected: { ContrastLevel.from(adjustments.contrast) == $0 },
+                        onSelect: { adjustments.contrast = $0.value }
+                    )
+                    AdjustmentButtonGroup(
+                        title: "Rotation",
+                        options: RotationOption.allCases,
+                        isSelected: { $0 == RotationOption.from(adjustments.rotation) },
+                        onSelect: { adjustments.rotation = $0.rotation }
+                    )
                 }
             }
             .padding()
@@ -109,28 +118,6 @@ struct ShareRootView: View {
             Text(loadError).foregroundStyle(.red)
         } else {
             ProgressView()
-        }
-    }
-
-    private func slider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double) -> some View {
-        HStack {
-            Text(title).frame(width: 100, alignment: .leading)
-            Slider(value: value, in: range, step: step)
-            Text(String(format: "%.2f", value.wrappedValue))
-                .font(.caption.monospacedDigit()).frame(width: 50, alignment: .trailing)
-        }
-    }
-
-    private func intSlider(_ title: String, value: Binding<Int>, range: ClosedRange<Int>, step: Int.Stride) -> some View {
-        HStack {
-            Text(title).frame(width: 100, alignment: .leading)
-            Slider(
-                value: Binding(get: { Double(value.wrappedValue) },
-                               set: { value.wrappedValue = Int($0) }),
-                in: Double(range.lowerBound)...Double(range.upperBound), step: Double(step)
-            )
-            Text("\(value.wrappedValue) px").font(.caption.monospacedDigit())
-                .frame(width: 50, alignment: .trailing)
         }
     }
 
