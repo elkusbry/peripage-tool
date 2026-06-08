@@ -95,9 +95,6 @@ cd ios && xcodegen generate && cd ..
 - Share Extension large-photo handling: very tall photos may exceed the
   extension's 120 MB runtime budget. Plan was an App-Group hand-off to
   the host app for processing. Not blocking — most photos fit fine.
-- Spec doc still describes the original "portrait rotates / landscape
-  stays" rule, before we flipped it twice today. Update if you want
-  documentation consistency.
 - The `working-2026-06-05` and `capture-mode` branches were merged into
   `main` and deleted. Git log preserves the history if you need to
   spelunk the 2026-06-07 debugging arc.

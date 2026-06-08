@@ -84,7 +84,8 @@ Pushed (iOS) / opened in detail pane or sheet (macOS) after a photo is picked.
   - Top margin: 0–300 px, default 40
   - Bottom margin: 0–300 px, default 120
 - **Rotation control**: a 5-position segmented picker — `Auto · 0° · 90° · 180° · 270°`. Default is `Auto`.
-- **Auto rotation rule**: after EXIF transpose, if `image.width >= image.height` (landscape), rotate 0°. Otherwise (portrait), rotate 90° clockwise. Goal: the photo's long axis always fits the 576 px print width, yielding compact prints (no 4-foot receipts). This is the **opposite** of the current Python behavior, which rotates landscapes so the long axis runs down the strip.
+- **Auto rotation rule** *(updated 2026-06-07 — see note below)*: after EXIF transpose, if `image.width > image.height` (landscape), rotate **90° clockwise**. Otherwise (portrait/square), rotate **0°**. Either way the photo's long axis ends up running **down the receipt strip**. This matches the Python behavior. Implementation: `ImageProcessor.resolveRotation`. The batch picker (`BatchReviewView.BatchRotation`) exposes the same three-way choice as `Auto · Vertical · Horizontal`, where Vertical = `.deg0` (long edge down-strip), Horizontal = `.deg270` (long edge across-strip, CCW).
+  > **History.** The original spec called for the opposite rule — landscape stays at 0°, portrait rotates — to produce compact prints. Two weeks of dogfooding showed users wanted the long axis down the strip every time (it reads better; receipt length isn't a complaint). The rule was flipped, then briefly flipped back, then resettled on landscape→90° / portrait→0°. If you find yourself tempted to revisit this, search `git log --oneline | grep -iE 'rotat|orient'` first — the arc is preserved.
 - **Buttons**: "Add to queue" (always available); "Print now" (adds + immediately starts the queue if idle)
 - Slider/rotation changes are debounced ~150 ms before re-dithering, so the preview doesn't recompute on every drag tick
 
