@@ -27,7 +27,7 @@ paste these blocks one at a time:
 
 ```bash
 cd ~/Downloads
-git clone https://github.com/YOUR-USER/peripage-tool.git
+git clone https://github.com/elkusbry/peripage-tool.git
 cd peripage-tool
 ```
 
@@ -89,7 +89,7 @@ those, open an issue and paste what you typed and what came back.
 Requires Python 3.10+ and a Mac or Linux box with Bluetooth.
 
 ```bash
-git clone https://github.com/YOUR-USER/peripage-tool.git
+git clone https://github.com/elkusbry/peripage-tool.git
 cd peripage-tool
 python3 -m venv venv
 source venv/bin/activate
