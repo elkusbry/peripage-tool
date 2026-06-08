@@ -1,9 +1,23 @@
 // ios/Peripage/App/BatchReviewView.swift
 import SwiftUI
 import PhotosUI
+import ImageIO
 
 #if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
+
+private extension Image {
+    init(platformImage: PlatformImage) {
+        #if canImport(UIKit)
+        self.init(uiImage: platformImage)
+        #else
+        self.init(nsImage: platformImage)
+        #endif
+    }
+}
 
 struct BatchReviewView: View {
     @Environment(PrintQueue.self) private var queue
@@ -27,7 +41,9 @@ struct BatchReviewView: View {
                 .padding()
             }
             .navigationTitle("Review \(entries.count) Photo\(entries.count == 1 ? "" : "s")")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -56,7 +72,7 @@ struct BatchReviewView: View {
                     case .loading:
                         ProgressView()
                     case .ready(let image, _):
-                        Image(uiImage: image)
+                        Image(platformImage: image)
                             .resizable()
                             .scaledToFit()
                             .padding(6)
@@ -273,36 +289,27 @@ private struct BatchEntry: Identifiable {
     // forces a fresh render.
     enum State {
         case loading
-        case ready(thumb: UIImage, data: Data)
+        case ready(thumb: PlatformImage, data: Data)
         case failed
     }
 }
 
 // MARK: - Helpers
 
-/// Decode `data` and downscale to ~600pt on the long edge for grid display.
-/// Returns nil if the data isn't a decodable image.
-private func downscaled(data: Data) -> UIImage? {
-    guard let source = UIImage(data: data) else { return nil }
-    let maxEdge: CGFloat = 600
-    let w = source.size.width
-    let h = source.size.height
-    guard max(w, h) > maxEdge else { return source }
-    let scale = maxEdge / max(w, h)
-    let target = CGSize(width: w * scale, height: h * scale)
-    let format = UIGraphicsImageRendererFormat.default()
-    format.scale = 1
-    let renderer = UIGraphicsImageRenderer(size: target, format: format)
-    return renderer.image { _ in
-        source.draw(in: CGRect(origin: .zero, size: target))
-    }
+/// Decode `data` and downscale to ~600px on the long edge for grid display
+/// using ImageIO so it works on both iOS and macOS.
+private func downscaled(data: Data) -> PlatformImage? {
+    guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+    let options: [CFString: Any] = [
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceCreateThumbnailWithTransform: true,
+        kCGImageSourceShouldCacheImmediately: true,
+        kCGImageSourceThumbnailMaxPixelSize: 600,
+    ]
+    guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+    #if canImport(UIKit)
+    return UIImage(cgImage: cg)
+    #else
+    return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+    #endif
 }
-
-#else
-
-struct BatchReviewView: View {
-    let items: [PhotosPickerItem]
-    var body: some View { Text("Multi-photo selection is iOS-only") }
-}
-
-#endif

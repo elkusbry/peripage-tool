@@ -38,6 +38,7 @@ struct HomeView: View {
                     .background(Capsule().fill(.tint))
                     .foregroundStyle(.white)
             }
+            .buttonStyle(.plain)
 
             if queue.jobs.contains(where: { !$0.status.isTerminal }) {
                 Button {
@@ -46,6 +47,7 @@ struct HomeView: View {
                     Label("Queue (\(queue.jobs.filter { !$0.status.isTerminal }.count))",
                           systemImage: "list.bullet")
                 }
+                .buttonStyle(.borderless)
             }
 
             Spacer()
