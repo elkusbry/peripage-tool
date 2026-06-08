@@ -132,26 +132,23 @@ struct BatchReviewView: View {
             entries = items.map { BatchEntry(pickerItem: $0) }
         }
 
-        await withTaskGroup(of: (UUID, BatchEntry.State).self) { group in
-            for entry in entries {
-                group.addTask {
-                    do {
-                        guard let data = try await entry.pickerItem.loadTransferable(type: Data.self) else {
-                            return (entry.id, .failed)
-                        }
-                        guard let image = downscaled(data: data) else {
-                            return (entry.id, .failed)
-                        }
-                        return (entry.id, .ready(thumb: image, data: data))
-                    } catch {
-                        return (entry.id, .failed)
-                    }
+        // Sequential on the MainActor: PhotosPickerItem.loadTransferable can stall when
+        // invoked from detached child tasks, and serial loading also keeps memory bounded
+        // (one full-resolution decode in flight at a time).
+        for entry in entries {
+            let state: BatchEntry.State
+            do {
+                if let data = try await entry.pickerItem.loadTransferable(type: Data.self),
+                   let image = downscaled(data: data) {
+                    state = .ready(thumb: image, data: data)
+                } else {
+                    state = .failed
                 }
+            } catch {
+                state = .failed
             }
-            for await (id, state) in group {
-                if let i = entries.firstIndex(where: { $0.id == id }) {
-                    entries[i].state = state
-                }
+            if let i = entries.firstIndex(where: { $0.id == entry.id }) {
+                entries[i].state = state
             }
         }
     }
