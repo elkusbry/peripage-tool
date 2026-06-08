@@ -163,25 +163,26 @@ struct BatchReviewView: View {
                 queue.enqueue(PrintJob(sourceData: data, adjustments: .default))
             }
         }
+        queue.start()
         dismiss()
     }
 }
 
 // MARK: - Model
 
-private struct BatchEntry: Identifiable, Equatable {
+private struct BatchEntry: Identifiable {
     let id = UUID()
     let pickerItem: PhotosPickerItem
     var state: State = .loading
 
-    enum State: Equatable {
+    // Not Equatable on purpose: a custom == by id alone makes SwiftUI's
+    // view-diffing think state mutations are no-ops, so tiles stay stuck
+    // on the loading spinner. Without Equatable, every @State write
+    // forces a fresh render.
+    enum State {
         case loading
         case ready(thumb: UIImage, data: Data)
         case failed
-    }
-
-    static func == (lhs: BatchEntry, rhs: BatchEntry) -> Bool {
-        lhs.id == rhs.id
     }
 }
 
