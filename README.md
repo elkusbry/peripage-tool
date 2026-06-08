@@ -16,6 +16,16 @@ output. The protocol is reverse-engineered from BLE captures of the
 official app; see [`docs/runbooks/peripage-protocol-change.md`](docs/runbooks/peripage-protocol-change.md)
 for the methodology if the firmware ever shifts again.
 
+## Screenshots
+
+| Web UI | iOS — Home | iOS — Preview |
+|---|---|---|
+| ![Web UI](docs/screenshots/web-ui.png) | ![iOS Home](docs/screenshots/ios-home.png) | ![iOS Preview](docs/screenshots/ios-preview.png) |
+
+> The iOS app and Mac target ship from the same Xcode project — see
+> [`ios/Project.yml`](ios/Project.yml). A Mac screenshot will land in
+> [`docs/screenshots/mac-app.png`](docs/screenshots/) once captured.
+
 ## I just want to print a photo (no coding background)
 
 If you're on a Mac and you have a Peripage A6, this should take about

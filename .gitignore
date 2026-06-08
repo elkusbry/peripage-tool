@@ -19,7 +19,11 @@ peripage_preview.png
 ios/Peripage.xcodeproj/
 ios/build/
 ios/DerivedData/
+ios/DerivedData-mac/
 .DS_Store
+
+# Playwright MCP scratch space (used during screenshot capture)
+.playwright-mcp/
 
 # Personal Apple Developer team ID (use developer.xcconfig.template)
 ios/developer.xcconfig
