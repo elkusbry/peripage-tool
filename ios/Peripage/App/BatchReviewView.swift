@@ -211,15 +211,16 @@ private enum BatchRotation: String, CaseIterable, Identifiable, Hashable {
     /// Resolve to a per-image Rotation. CCW reorient when needed —
     /// matches iOS Photos' "Rotate" default direction.
     /// Currently identical for landscape and portrait sources per user
-    /// testing: Vertical always rotates 90° CCW, Horizontal never rotates.
-    /// `forLandscape` is kept on the signature so we can re-introduce
-    /// orientation-aware logic without a churning refactor.
+    /// testing: Vertical leaves the photo as-is (long edge runs down the
+    /// strip), Horizontal rotates 90° CCW (long edge runs across the
+    /// strip). `forLandscape` is kept on the signature so we can
+    /// re-introduce orientation-aware logic without a churning refactor.
     func resolved(forLandscape isLandscape: Bool) -> Rotation {
         _ = isLandscape
         switch self {
         case .auto:       return .auto
-        case .vertical:   return .deg270
-        case .horizontal: return .deg0
+        case .vertical:   return .deg0
+        case .horizontal: return .deg270
         }
     }
 }
