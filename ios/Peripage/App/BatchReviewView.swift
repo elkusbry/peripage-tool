@@ -169,9 +169,14 @@ struct BatchReviewView: View {
     }
 
     private func printAll() {
-        for entry in entries {
+        for (idx, entry) in entries.enumerated() {
             if case .ready(let thumb, let data) = entry.state {
-                let rotation = batchRotation.resolved(forLandscape: thumb.size.width > thumb.size.height)
+                let isLandscape = thumb.size.width > thumb.size.height
+                let rotation = batchRotation.resolved(forLandscape: isLandscape)
+                DebugLog.shared.info(
+                    "Batch[\(idx + 1)]: thumb=\(Int(thumb.size.width))×\(Int(thumb.size.height)) " +
+                    "landscape=\(isLandscape) mode=\(batchRotation.label) → rotation=\(rotation.label)"
+                )
                 queue.enqueue(PrintJob(sourceData: data, adjustments: Adjustments(rotation: rotation)))
             }
         }
