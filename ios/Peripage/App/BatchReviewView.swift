@@ -13,12 +13,12 @@ struct BatchReviewView: View {
 
     @State private var entries: [BatchEntry] = []
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 2)
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVGrid(columns: columns, spacing: 8) {
+                LazyVGrid(columns: columns, spacing: 12) {
                     ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                         tile(index: index, entry: entry)
                     }
@@ -46,35 +46,33 @@ struct BatchReviewView: View {
     @ViewBuilder
     private func tile(index: Int, entry: BatchEntry) -> some View {
         ZStack(alignment: .topLeading) {
-            Group {
-                switch entry.state {
-                case .loading:
-                    placeholder { ProgressView() }
-                case .ready(let image, _):
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                case .failed:
-                    placeholder {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.secondary.opacity(0.15))
+                .aspectRatio(1, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .overlay {
+                    switch entry.state {
+                    case .loading:
+                        ProgressView()
+                    case .ready(let image, _):
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .padding(6)
+                    case .failed:
                         Image(systemName: "exclamationmark.triangle")
+                            .font(.title2)
                             .foregroundStyle(.secondary)
                     }
                 }
-            }
-            .aspectRatio(1, contentMode: .fill)
-            .frame(maxWidth: .infinity)
-            .clipped()
-            .clipShape(RoundedRectangle(cornerRadius: 8))
 
-            // Numbered badge — reflects current index after any removals.
             Text("\(index + 1)")
-                .font(.caption.bold())
+                .font(.subheadline.bold())
                 .foregroundStyle(.white)
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(Capsule().fill(.black.opacity(0.6)))
-                .padding(6)
+                .frame(width: 26, height: 26)
+                .background(Circle().fill(.black.opacity(0.7)))
+                .padding(8)
 
-            // × in top-trailing.
             VStack {
                 HStack {
                     Spacer()
@@ -82,12 +80,13 @@ struct BatchReviewView: View {
                         remove(entry.id)
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.title3)
+                            .font(.title2)
                             .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, .black.opacity(0.6))
+                            .foregroundStyle(.white, .black.opacity(0.7))
+                            .padding(8)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .padding(6)
                 }
                 Spacer()
             }
