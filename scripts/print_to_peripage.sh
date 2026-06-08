@@ -6,7 +6,8 @@
 
 set -u
 
-REPO="/Users/bryanelkus/Repo/peripage-tool"
+# Discover the repo relative to this script — works wherever you clone.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON="$REPO/venv/bin/python"
 SCRIPT="$REPO/print_photo.py"
 LOG="$HOME/Library/Logs/peripage-tool.log"

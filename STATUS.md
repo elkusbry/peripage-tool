@@ -2,7 +2,8 @@
 
 > Last touched: 2026-06-07. Things are **working** — prints come out
 > of the printer from all three clients. This file is the 90-second
-> orientation for whoever picks this up next.
+> maintainer orientation for whoever picks this up next. See
+> [README.md](README.md) for the public-facing project overview.
 
 ## What you can do right now
 
