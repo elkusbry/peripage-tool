@@ -16,6 +16,62 @@ output. The protocol is reverse-engineered from BLE captures of the
 official app; see [`docs/runbooks/peripage-protocol-change.md`](docs/runbooks/peripage-protocol-change.md)
 for the methodology if the firmware ever shifts again.
 
+## I just want to print a photo (no coding background)
+
+If you're on a Mac and you have a Peripage A6, this should take about
+**five minutes** and you don't need to know what any of it means. Open
+the Terminal app (press `Cmd+Space`, type "Terminal", hit Return) and
+paste these blocks one at a time:
+
+**1. Grab the code:**
+
+```bash
+cd ~/Downloads
+git clone https://github.com/YOUR-USER/peripage-tool.git
+cd peripage-tool
+```
+
+**2. Set up the tools it needs (one-time):**
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install pillow pillow-heif bleak
+```
+
+Wait for it to finish — it'll print a bunch of "Successfully installed"
+lines. That's good.
+
+**3. Turn the Peripage on**, make sure it has paper, and keep it within
+arm's reach of your Mac (Bluetooth is short-range).
+
+**4. Print a photo:**
+
+```bash
+python print_photo.py ~/Desktop/my-photo.jpg
+```
+
+Swap `~/Desktop/my-photo.jpg` for the path to any photo on your
+computer. (Tip: drag a file into the Terminal window and it pastes the
+full path automatically.) Give it ~10 seconds to find the printer over
+Bluetooth, then it'll print.
+
+**Coming back tomorrow?** You only need step 4 — but first run
+`cd ~/Downloads/peripage-tool && source venv/bin/activate` so the
+Terminal knows where to look.
+
+**Want a web page instead of typing commands every time?** After step
+2, run `pip install flask` once, then `python webui.py`, then open
+<http://127.0.0.1:5000> in your browser. Drag a photo in, click Print.
+
+**Want a right-click menu in Finder?** See the Finder Quick Action
+section below — it's a 2-minute Automator setup.
+
+**Stuck?** The most common issues are: (a) the printer is off or out
+of range, (b) the printer needs a charge, (c) you forgot
+`source venv/bin/activate` after closing the Terminal. If none of
+those, open an issue and paste what you typed and what came back.
+
 ## What's in the box
 
 | Client | Where | Status |
