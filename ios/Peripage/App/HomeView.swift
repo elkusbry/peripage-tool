@@ -5,8 +5,10 @@ struct HomeView: View {
     @Environment(PrinterClient.self) private var printer
     @Environment(PrintQueue.self) private var queue
 
-    @State private var photoItem: PhotosPickerItem?
-    @State private var pickedData: Data?
+    @State private var photoItems: [PhotosPickerItem] = []
+    @State private var pickedData: Data?            // populated only for the 1-photo path
+    @State private var showBatchReview = false      // true when 2+ photos were picked
+    @State private var batchItems: [PhotosPickerItem] = []
     @State private var showDebug = false
     @State private var showQueue = false
 
@@ -21,8 +23,14 @@ struct HomeView: View {
 
             Spacer()
 
-            PhotosPicker(selection: $photoItem, matching: .images, photoLibrary: .shared()) {
-                Label("Choose Photo", systemImage: "photo.on.rectangle")
+            PhotosPicker(
+                selection: $photoItems,
+                maxSelectionCount: 20,
+                selectionBehavior: .ordered,
+                matching: .images,
+                photoLibrary: .shared()
+            ) {
+                Label("Choose Photos", systemImage: "photo.on.rectangle")
                     .font(.title2.bold())
                     .padding(.horizontal, 24).padding(.vertical, 16)
                     .background(Capsule().fill(.tint))
@@ -47,17 +55,31 @@ struct HomeView: View {
         .padding()
         .navigationDestination(isPresented: Binding(
             get: { pickedData != nil },
-            set: { if !$0 { pickedData = nil; photoItem = nil } }
+            set: { if !$0 { pickedData = nil; photoItems = [] } }
         )) {
             if let data = pickedData {
                 PreviewView(sourceData: data)
             }
         }
+        .sheet(isPresented: $showBatchReview, onDismiss: {
+            batchItems = []
+            photoItems = []
+        }) {
+            BatchReviewView(items: batchItems)
+        }
         .sheet(isPresented: $showQueue) { QueueView() }
         .sheet(isPresented: $showDebug) { DebugLogView() }
-        .task(id: photoItem) {
-            guard let photoItem else { return }
-            pickedData = try? await photoItem.loadTransferable(type: Data.self)
+        .task(id: photoItems) {
+            // Route by selection count. Empty = no-op (picker cancelled or state reset).
+            switch photoItems.count {
+            case 0:
+                return
+            case 1:
+                pickedData = try? await photoItems[0].loadTransferable(type: Data.self)
+            default:
+                batchItems = photoItems
+                showBatchReview = true
+            }
         }
     }
 }
