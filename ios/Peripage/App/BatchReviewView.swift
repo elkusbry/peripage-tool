@@ -197,14 +197,15 @@ private enum BatchRotation: String, CaseIterable, Identifiable, Hashable {
 
     /// Resolve to a per-image Rotation. Vertical = long edge along paper feed
     /// (image prints tall). Horizontal = short edge along feed (image prints wide).
+    /// Rotate counter-clockwise when reorienting — matches iOS Photos' "Rotate" default.
     func resolved(forLandscape isLandscape: Bool) -> Rotation {
         switch self {
         case .auto:
             return .auto
         case .vertical:
-            return isLandscape ? .deg90 : .deg0
+            return isLandscape ? .deg270 : .deg0
         case .horizontal:
-            return isLandscape ? .deg0 : .deg90
+            return isLandscape ? .deg0 : .deg270
         }
     }
 }
