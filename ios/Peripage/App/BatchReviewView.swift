@@ -107,7 +107,9 @@ struct BatchReviewView: View {
     private var printAllBar: some View {
         let readyCount = entries.filter { if case .ready = $0.state { return true } else { return false } }.count
         let anyLoading = entries.contains { if case .loading = $0.state { return true } else { return false } }
-        let label = readyCount == 0 ? "Print all" : "Print all \(readyCount)"
+        let printLabel = readyCount == 0 ? "Print all" : "Print all \(readyCount)"
+        let queueLabel = readyCount == 0 ? "Add all to queue" : "Add all \(readyCount) to queue"
+        let disabled = anyLoading || readyCount == 0
 
         return VStack(spacing: 10) {
             Picker("Orientation", selection: $batchRotation) {
@@ -116,21 +118,27 @@ struct BatchReviewView: View {
                 }
             }
             .pickerStyle(.segmented)
-            .padding(.horizontal)
 
             Button {
-                printAll()
+                printAll(start: true)
             } label: {
-                Text(label)
-                    .font(.title3.bold())
+                Label(printLabel, systemImage: "printer.fill")
+                    .font(.headline)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Capsule().fill(.tint))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal)
+                    .padding(.vertical, 6)
             }
-            .disabled(anyLoading || readyCount == 0)
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(disabled)
+
+            Button(queueLabel) {
+                printAll(start: false)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
+            .disabled(disabled)
         }
+        .padding(.horizontal)
         .padding(.bottom, 8)
         .background(.bar)
     }
@@ -168,7 +176,7 @@ struct BatchReviewView: View {
         entries.removeAll { $0.id == id }
     }
 
-    private func printAll() {
+    private func printAll(start: Bool) {
         for (idx, entry) in entries.enumerated() {
             if case .ready(let thumb, let data) = entry.state {
                 let isLandscape = thumb.size.width > thumb.size.height
@@ -180,7 +188,7 @@ struct BatchReviewView: View {
                 queue.enqueue(PrintJob(sourceData: data, adjustments: Adjustments(rotation: rotation)))
             }
         }
-        queue.start()
+        if start { queue.start() }
         dismiss()
     }
 }
