@@ -6,9 +6,8 @@ struct HomeView: View {
     @Environment(PrintQueue.self) private var queue
 
     @State private var photoItems: [PhotosPickerItem] = []
-    @State private var pickedData: Data?            // populated only for the 1-photo path
-    @State private var showBatchReview = false      // true when 2+ photos were picked
-    @State private var batchItems: [PhotosPickerItem] = []
+    @State private var pickedData: Data?                // populated only for the 1-photo path
+    @State private var batchPresentation: BatchPresentation?  // non-nil presents the batch sheet
     @State private var showDebug = false
     @State private var showQueue = false
 
@@ -61,11 +60,8 @@ struct HomeView: View {
                 PreviewView(sourceData: data)
             }
         }
-        .sheet(isPresented: $showBatchReview, onDismiss: {
-            batchItems = []
-            photoItems = []
-        }) {
-            BatchReviewView(items: batchItems)
+        .sheet(item: $batchPresentation, onDismiss: { photoItems = [] }) { presentation in
+            BatchReviewView(items: presentation.items)
         }
         .sheet(isPresented: $showQueue) { QueueView() }
         .sheet(isPresented: $showDebug) { DebugLogView() }
@@ -77,11 +73,15 @@ struct HomeView: View {
             case 1:
                 pickedData = try? await photoItems[0].loadTransferable(type: Data.self)
             default:
-                batchItems = photoItems
-                showBatchReview = true
+                batchPresentation = BatchPresentation(items: photoItems)
             }
         }
     }
+}
+
+private struct BatchPresentation: Identifiable {
+    let id = UUID()
+    let items: [PhotosPickerItem]
 }
 
 private struct LogTail: View {
