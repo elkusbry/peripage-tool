@@ -24,9 +24,9 @@ for the methodology if the firmware ever shifts again.
 
 **iOS**
 
-| Home | Preview | Share Sheet |
+| Home | Preview | Share Extension |
 |---|---|---|
-| ![iOS Home](docs/screenshots/ios-home.png) | ![iOS Preview](docs/screenshots/ios-preview.png) | ![iOS Share Sheet](docs/screenshots/ios-share.png) |
+| ![iOS Home](docs/screenshots/ios-home.png) | ![iOS Preview](docs/screenshots/ios-preview.png) | ![iOS Share Extension](docs/screenshots/ios-share.png) |
 
 **Mac + Web**
 
