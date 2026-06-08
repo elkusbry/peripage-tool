@@ -12,6 +12,7 @@ struct BatchReviewView: View {
     let items: [PhotosPickerItem]
 
     @State private var entries: [BatchEntry] = []
+    @State private var batchRotation: BatchRotation = .auto
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 2)
 
@@ -108,19 +109,30 @@ struct BatchReviewView: View {
         let anyLoading = entries.contains { if case .loading = $0.state { return true } else { return false } }
         let label = readyCount == 0 ? "Print all" : "Print all \(readyCount)"
 
-        return Button {
-            printAll()
-        } label: {
-            Text(label)
-                .font(.title3.bold())
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(Capsule().fill(.tint))
-                .foregroundStyle(.white)
-                .padding(.horizontal)
-                .padding(.bottom, 8)
+        return VStack(spacing: 10) {
+            Picker("Orientation", selection: $batchRotation) {
+                ForEach(BatchRotation.allCases) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+
+            Button {
+                printAll()
+            } label: {
+                Text(label)
+                    .font(.title3.bold())
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Capsule().fill(.tint))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal)
+            }
+            .disabled(anyLoading || readyCount == 0)
         }
-        .disabled(anyLoading || readyCount == 0)
+        .padding(.bottom, 8)
+        .background(.bar)
     }
 
     // MARK: - Actions
@@ -158,12 +170,42 @@ struct BatchReviewView: View {
 
     private func printAll() {
         for entry in entries {
-            if case .ready(_, let data) = entry.state {
-                queue.enqueue(PrintJob(sourceData: data, adjustments: .default))
+            if case .ready(let thumb, let data) = entry.state {
+                let rotation = batchRotation.resolved(forLandscape: thumb.size.width > thumb.size.height)
+                queue.enqueue(PrintJob(sourceData: data, adjustments: Adjustments(rotation: rotation)))
             }
         }
         queue.start()
         dismiss()
+    }
+}
+
+// MARK: - Batch rotation mode
+
+private enum BatchRotation: String, CaseIterable, Identifiable, Hashable {
+    case auto, vertical, horizontal
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .auto: return "Auto"
+        case .vertical: return "Vertical"
+        case .horizontal: return "Horizontal"
+        }
+    }
+
+    /// Resolve to a per-image Rotation. Vertical = long edge along paper feed
+    /// (image prints tall). Horizontal = short edge along feed (image prints wide).
+    func resolved(forLandscape isLandscape: Bool) -> Rotation {
+        switch self {
+        case .auto:
+            return .auto
+        case .vertical:
+            return isLandscape ? .deg90 : .deg0
+        case .horizontal:
+            return isLandscape ? .deg0 : .deg90
+        }
     }
 }
 
