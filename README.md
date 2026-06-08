@@ -18,9 +18,9 @@ for the methodology if the firmware ever shifts again.
 
 ## Screenshots
 
-| Web UI | iOS — Home | iOS — Preview |
-|---|---|---|
-| ![Web UI](docs/screenshots/web-ui.png) | ![iOS Home](docs/screenshots/ios-home.png) | ![iOS Preview](docs/screenshots/ios-preview.png) |
+| Web UI | iOS — Home | iOS — Preview | iOS — Share Sheet |
+|---|---|---|---|
+| ![Web UI](docs/screenshots/web-ui.png) | ![iOS Home](docs/screenshots/ios-home.png) | ![iOS Preview](docs/screenshots/ios-preview.png) | ![iOS Share Sheet](docs/screenshots/ios-share.png) |
 
 > The iOS app and Mac target ship from the same Xcode project — see
 > [`ios/Project.yml`](ios/Project.yml). A Mac screenshot will land in
