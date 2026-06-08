@@ -111,13 +111,8 @@ struct BatchReviewView: View {
         let queueLabel = readyCount == 0 ? "Add all to queue" : "Add all \(readyCount) to queue"
         let disabled = anyLoading || readyCount == 0
 
-        return VStack(spacing: 10) {
-            Picker("Orientation", selection: $batchRotation) {
-                ForEach(BatchRotation.allCases) { mode in
-                    Text(mode.label).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
+        return VStack(spacing: 12) {
+            rotationButtonGroup
 
             Button {
                 printAll(start: true)
@@ -139,8 +134,40 @@ struct BatchReviewView: View {
             .disabled(disabled)
         }
         .padding(.horizontal)
+        .padding(.top, 8)
         .padding(.bottom, 8)
         .background(.bar)
+    }
+
+    private var rotationButtonGroup: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Rotation").font(.subheadline).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                ForEach(BatchRotation.allCases) { mode in
+                    let selected = mode == batchRotation
+                    Button {
+                        batchRotation = mode
+                    } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: mode.icon).font(.title3)
+                            Text(mode.label).font(.caption2)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(selected ? Color.accentColor.opacity(0.20) : Color.gray.opacity(0.08))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(selected ? Color.accentColor : Color.clear, lineWidth: 1.5)
+                        )
+                        .foregroundStyle(selected ? Color.accentColor : .primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
     }
 
     // MARK: - Actions
@@ -205,6 +232,14 @@ private enum BatchRotation: String, CaseIterable, Identifiable, Hashable {
         case .auto: return "Auto"
         case .vertical: return "Vertical"
         case .horizontal: return "Horizontal"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .auto: return "wand.and.stars"
+        case .vertical: return "rectangle.portrait"
+        case .horizontal: return "rectangle"
         }
     }
 
