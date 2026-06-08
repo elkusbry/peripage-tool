@@ -1,5 +1,8 @@
 import SwiftUI
 import PhotosUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct HomeView: View {
     @Environment(PrinterClient.self) private var printer
@@ -75,6 +78,13 @@ struct HomeView: View {
             default:
                 batchPresentation = BatchPresentation(items: photoItems)
             }
+        }
+        // Keep the screen awake while jobs are draining so a multi-photo batch
+        // doesn't get cut off when auto-lock kicks in mid-print.
+        .onChange(of: queue.isRunning) { _, running in
+            #if canImport(UIKit)
+            UIApplication.shared.isIdleTimerDisabled = running
+            #endif
         }
     }
 }
