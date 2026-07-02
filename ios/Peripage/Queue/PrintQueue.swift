@@ -70,23 +70,33 @@ public final class PrintQueue {
     private func process(jobIndex i: Int) async {
         jobs[i].status = .rendering
         let job = jobs[i]
+        let adj = job.adjustments
+        let src = job.sourceData
         do {
-            let processed = try ImageProcessor.process(job.sourceData, adjustments: job.adjustments)
-            let payload = PeripageProtocol.buildPayload(
-                rasterBytes: processed.rasterBytes,
-                height: processed.height,
-                leadingFeed: job.adjustments.topMarginPx,
-                trailingFeed: job.adjustments.bottomMarginPx
-            )
+            // Render off the MainActor while the BLE connect handshake runs —
+            // the two are independent, so rendering hides under connect latency
+            // instead of blocking the actor before it. ImageProcessor.process
+            // is a pure static over local buffers, safe off-MainActor.
+            let renderTask = Task.detached(priority: .userInitiated) {
+                try ImageProcessor.process(src, adjustments: adj)
+            }
             do {
                 try await printer.ensureConnected()
                 consecutiveConnectFailures = 0
             } catch let e as BLEError {
+                renderTask.cancel()
                 consecutiveConnectFailures += 1
                 jobs[i].status = .failed(reason: String(describing: e))
                 Haptics.error()
                 return
             }
+            let processed = try await renderTask.value
+            let payload = PeripageProtocol.buildPayload(
+                rasterBytes: processed.rasterBytes,
+                height: processed.height,
+                leadingFeed: adj.topMarginPx,
+                trailingFeed: adj.bottomMarginPx
+            )
             jobs[i].status = .sending(progress: 0.0)
             try await printer.send(payload, jobId: job.id, height: processed.height)
             jobs[i].status = .done
