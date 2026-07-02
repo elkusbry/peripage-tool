@@ -64,8 +64,17 @@ public enum PeripageProtocol {
     /// BLE name prefix advertised by Peripage devices.
     public static let nameNamePrefix: String = "PeriPage"
 
+    /// GATT service holding the FF01/FF02/FF03 characteristics. Used to scope
+    /// service/characteristic discovery instead of walking the whole GATT table.
+    public static let serviceUUIDString = "FF00"
+
     /// Write characteristic UUID.
     public static let writeCharacteristicUUIDString = "0000ff02-0000-1000-8000-00805f9b34fb"
+
+    /// Notify (status channel) characteristic UUIDs. FF01 emits a handshake
+    /// ("OK"); FF03 emits periodic status. The firmware won't honour print
+    /// commands until it sees a subscriber here, so we still subscribe to both.
+    public static let notifyCharacteristicUUIDStrings = ["FF01", "FF03"]
 
     /// New protocol (captured 2026-06-07 from the official Peripage iOS
     /// app via PacketLogger). The old `cmdReset = 10 11 FF FE 01` no

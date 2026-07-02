@@ -281,7 +281,9 @@ extension PrinterClient: CBCentralManagerDelegate {
     nonisolated public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         Task { @MainActor in
             DebugLog.shared.info("Connected to \(peripheral.name ?? "?"), discovering services…")
-            peripheral.discoverServices(nil)
+            // Scope discovery to the known Peripage service rather than walking
+            // the whole GATT table — fewer round-trips before ready-to-send.
+            peripheral.discoverServices([CBUUID(string: PeripageProtocol.serviceUUIDString)])
         }
     }
 
@@ -315,9 +317,14 @@ extension PrinterClient: CBCentralManagerDelegate {
 extension PrinterClient: CBPeripheralDelegate {
     nonisolated public func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         Task { @MainActor in
+            // Only the write + notify characteristics we actually use, so the
+            // peripheral returns them in one round-trip.
+            let charUUIDs = ([PeripageProtocol.writeCharacteristicUUIDString]
+                             + PeripageProtocol.notifyCharacteristicUUIDStrings)
+                .map { CBUUID(string: $0) }
             for service in peripheral.services ?? [] {
                 DebugLog.shared.info("Discovered service: \(service.uuid.uuidString)")
-                peripheral.discoverCharacteristics(nil, for: service)
+                peripheral.discoverCharacteristics(charUUIDs, for: service)
             }
         }
     }
