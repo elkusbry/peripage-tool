@@ -76,9 +76,24 @@ public final class PrinterClient: NSObject, PrinterClientProtocol {
         let chunkSize = min(PeripageProtocol.chunkSize, maxLen)
         DebugLog.shared.info("send: \(total) bytes, chunk=\(chunkSize) (mtu=\(maxLen)), type=\(writeType == .withoutResponse ? "WR" : "withResp")")
 
+        // Deadline pacing + stall instrumentation. We schedule chunk n to go no
+        // earlier than `scheduleAnchor + n × interChunkDelay` on a monotonic
+        // clock, so overshoot (MainActor contention, timer coalescing) self-
+        // corrects instead of accumulating. maxGap/stallCount let a bad print be
+        // matched to a logged stall in the field — a gap with no image shift is
+        // underrun (head starved); a shift would be receive-buffer overrun.
+        let clock = ContinuousClock()
+        let sendStart = clock.now
+        var scheduleAnchor = sendStart
+        var lastWriteAt = sendStart
+        var chunkIndex = 0
+        var maxGap: Duration = .zero
+        var stallCount = 0
+
         while sent < total {
             let end = min(sent + chunkSize, total)
             let chunk = payload[sent..<end]
+            chunkIndex += 1
 
             if writeType == .withResponse {
                 try await withCheckedThrowingContinuation { (cc: CheckedContinuation<Void, Error>) in
@@ -93,18 +108,51 @@ public final class PrinterClient: NSObject, PrinterClientProtocol {
                         self.pendingReadyToSend = cc
                     }
                 }
+
+                // Instrumentation: how long since the previous chunk actually
+                // went out? A gap much larger than interChunkDelay is a stall
+                // that can starve the print head.
+                let writeAt = clock.now
+                let gap = writeAt - lastWriteAt
+                if gap > maxGap { maxGap = gap }
+                if chunkIndex > 1 && gap > .milliseconds(40) {
+                    stallCount += 1
+                    let row = chunkIndex * chunkSize / PeripageProtocol.rowBytes
+                    DebugLog.shared.warn("stall: chunk \(chunkIndex) gap \(String(format: "%.0f", gap.msValue))ms (row ~\(row))")
+                }
+                lastWriteAt = writeAt
+
                 peripheral.writeValue(chunk, for: writeChar, type: .withoutResponse)
-                // Small breather between chunks — matches Python's 15ms
-                // asyncio.sleep, gives the printer's UART time to drain.
-                try await Task.sleep(for: PeripageProtocol.interChunkDelay)
+
+                // Deadline pacing. After a stall the loop sends back-to-back
+                // (still gated by canSendWriteWithoutResponse) until back on
+                // schedule — the burst that refills the starved printer buffer.
+                // Cap catch-up: if we're more than maxPacingBacklog behind,
+                // re-anchor so the burst stays bounded (~12 chunks).
+                let deadline = scheduleAnchor + PeripageProtocol.interChunkDelay * chunkIndex
+                let now = clock.now
+                if now < deadline {
+                    try await Task.sleep(until: deadline, clock: clock)
+                } else if now - deadline > PeripageProtocol.maxPacingBacklog {
+                    scheduleAnchor = now - PeripageProtocol.interChunkDelay * chunkIndex
+                }
             }
 
             sent = end
-            state = .sending(jobId: jobId, progress: Double(sent) / Double(total))
-            if (sent / chunkSize) % 16 == 0 || sent == total {
+            // Throttle the observable mutation to ~5Hz. Mutating on every chunk
+            // interleaves SwiftUI diffing with the send loop on this actor and
+            // was a contributor to the pacing jitter.
+            if chunkIndex % 16 == 0 || sent == total {
+                state = .sending(jobId: jobId, progress: Double(sent) / Double(total))
                 DebugLog.shared.info("  sent \(sent)/\(total) (\(Int(Double(sent) * 100 / Double(total)))%)")
             }
         }
+
+        let elapsed = clock.now - sendStart
+        let secs = elapsed.msValue / 1000
+        let kbps = secs > 0 ? Double(total) / 1024 / secs : 0
+        DebugLog.shared.info("send complete: \(total)B in \(String(format: "%.1f", secs))s (\(String(format: "%.1f", kbps)) KB/s), stalls>40ms: \(stallCount), max gap: \(String(format: "%.0f", maxGap.msValue))ms")
+
         // Settle: real printer needs ~3s to flush its buffer
         DebugLog.shared.info("send done; waiting 3s for printer to flush")
         try await Task.sleep(for: .seconds(3))
@@ -363,5 +411,12 @@ extension PrinterClient: CBPeripheralDelegate {
                 cc.resume()
             }
         }
+    }
+}
+
+private extension Duration {
+    /// Whole + fractional milliseconds, for logging only.
+    var msValue: Double {
+        Double(components.seconds) * 1000 + Double(components.attoseconds) / 1e15
     }
 }

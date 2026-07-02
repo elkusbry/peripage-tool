@@ -179,6 +179,20 @@ public static let trailingFeedPx: UInt8 = 96
 Then mirror the new `buildPayload()` structure exactly. **Critical:** every
 byte must match Python — the parity tests will catch you if they don't.
 
+### 3.4 Transport pacing (separate from payload bytes)
+
+The inter-chunk pacing constants (`INTER_CHUNK_S` / `MAX_BACKLOG_S` in
+`print_photo.py`, `interChunkDelay` / `maxPacingBacklog` in
+`PeripageProtocol.swift`) also live in lockstep across the two send loops,
+but they are **transport tuning, not payload bytes**. Changing them does NOT
+change the assembled payload and does NOT require regenerating the parity
+fixtures (the fixtures cover `encodeImageToBytes` / `buildPayload` output
+only). Both loops are deadline-paced: chunk *n* goes no earlier than
+`anchor + n × interval`, so overshoot self-corrects rather than accumulating
+into a printer-side underrun gap. If prints show shifted/torn rows instead of
+blank lines, that's receive-buffer overrun — raise the interval back toward
+15ms.
+
 ---
 
 ## 4. Regenerate fixtures and verify

@@ -13,8 +13,18 @@ public enum PeripageProtocol {
     /// Max BLE write payload chunk. Multiple of rowBytes.
     public static let chunkSize: Int = 96
 
-    /// Inter-chunk delay during BLE send.
-    public static let interChunkDelay: Duration = .milliseconds(15)
+    /// Target inter-chunk interval during BLE send. Transport pacing only —
+    /// NOT part of the payload and NOT covered by the parity fixtures, so this
+    /// can be retuned without regenerating fixtures. 12ms/96B = 8.0 KB/s ≈ 111
+    /// rows/s vs the head's ~89 rows/s (25% headroom). Was 15ms (zero headroom),
+    /// which caused intermittent underrun gaps — the head outran delivery and
+    /// fed blank paper. If overrun ever appears (shifted image), bump toward 15.
+    public static let interChunkDelay: Duration = .milliseconds(12)
+
+    /// If deadline pacing falls this far behind (e.g. a long MainActor stall),
+    /// re-anchor the schedule so the catch-up burst stays bounded (~12 chunks)
+    /// instead of slamming the printer's receive path.
+    public static let maxPacingBacklog: Duration = .milliseconds(150)
 
     /// Default 8s scan timeout, matching the Python tool.
     public static let scanTimeout: Duration = .seconds(8)

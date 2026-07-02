@@ -47,6 +47,13 @@ ROW_BYTES = PRINT_WIDTH_PX // 8       # 72 bytes per row, 1bpp MSB-first
 # need to align with ROW_BYTES — the printer reassembles the byte stream.
 CHUNK_SIZE = 96
 ROWS_PER_BLOCK = 256                  # send image as multiple GS v 0 blocks
+# Transport pacing. Must stay in lockstep with PeripageProtocol.swift's
+# interChunkDelay / maxPacingBacklog (this is tuning, NOT payload bytes, so
+# it does NOT require regenerating the parity fixtures). 12ms/96B = 8.0 KB/s
+# ≈ 111 rows/s vs the head's ~89 rows/s; deadline-paced so overshoot self-
+# corrects instead of accumulating into an underrun gap.
+INTER_CHUNK_S = 0.012
+MAX_BACKLOG_S = 0.150
 
 # --- New protocol (post-firmware-update) ---
 # Captured 2026-06-07 from the official Peripage iOS app via PacketLogger
@@ -140,11 +147,23 @@ async def send_payload(client: BleakClient, payload: bytes) -> None:
     chunks = (total + CHUNK_SIZE - 1) // CHUNK_SIZE
     print(f"  Sending {total:,} bytes in {chunks} chunks...")
     sent = 0
+    # Deadline pacing on the event loop's monotonic clock: chunk n goes no
+    # earlier than anchor + n*INTER_CHUNK_S. After a stall we send back-to-back
+    # until caught up; a long stall re-anchors so the burst stays bounded.
+    loop = asyncio.get_running_loop()
+    anchor = loop.time()
+    n = 0
     for i in range(0, total, CHUNK_SIZE):
         chunk = payload[i:i + CHUNK_SIZE]
         await client.write_gatt_char(WRITE_UUID, chunk, response=False)
         sent += len(chunk)
-        await asyncio.sleep(0.015)
+        n += 1
+        deadline = anchor + n * INTER_CHUNK_S
+        now = loop.time()
+        if now < deadline:
+            await asyncio.sleep(deadline - now)
+        elif now - deadline > MAX_BACKLOG_S:
+            anchor = now - n * INTER_CHUNK_S
         if sent % (CHUNK_SIZE * 50) == 0 or sent == total:
             print(f"    {sent:,}/{total:,} ({100*sent/total:.0f}%)")
     print("  All chunks sent.")
