@@ -9,9 +9,9 @@ public protocol PrinterClientProtocol: AnyObject, Sendable {
     /// failure.
     func ensureConnected() async throws
 
-    /// Send a single payload to the printer in 96-byte chunks with a
-    /// 15ms inter-chunk gap. Updates `state` to `.sending(jobId, progress)`.
-    /// Throws on disconnect / write failure.
+    /// Send a single payload to the printer in 96-byte chunks, deadline-paced
+    /// at `PeripageProtocol.interChunkDelay`. Updates `state` to
+    /// `.sending(jobId, progress)`. Throws on disconnect / write failure.
     func send(_ payload: Data, jobId: UUID) async throws
 
     /// Cleanly disconnect (called at queue idle).
