@@ -193,25 +193,51 @@ struct BatchReviewView: View {
         if entries.isEmpty {
             entries = items.map { BatchEntry(pickerItem: $0) }
         }
+        let total = entries.count
+        DebugLog.shared.info("BatchReview loadAll: \(total) entr\(total == 1 ? "y" : "ies")")
 
-        // Sequential on the MainActor: PhotosPickerItem.loadTransferable can stall when
-        // invoked from detached child tasks, and serial loading also keeps memory bounded
-        // (one full-resolution decode in flight at a time).
-        for entry in entries {
+        // Sequential loadTransferable on the MainActor (concurrent calls stall —
+        // see commit 58d07ac). But push the synchronous CGImageSource thumbnail
+        // decode off the MainActor: holding the main queue between picker calls
+        // makes PhotosUI's item-provider XPC time out, and we were seeing
+        // entries past #3 silently stay unrendered when the decode for #1–#3
+        // hogged the main queue.
+        let snapshot = entries
+        for (idx, entry) in snapshot.enumerated() {
+            let n = idx + 1
             let state: BatchEntry.State
             do {
-                if let data = try await entry.pickerItem.loadTransferable(type: Data.self),
-                   let image = downscaled(data: data) {
-                    state = .ready(thumb: image, data: data)
+                if let data = try await entry.pickerItem.loadTransferable(type: Data.self) {
+                    let image = await Task.detached(priority: .userInitiated) {
+                        downscaled(data: data)
+                    }.value
+                    if let image {
+                        state = .ready(thumb: image, data: data)
+                    } else {
+                        DebugLog.shared.warn("BatchReview[\(n)/\(total)]: decode returned nil")
+                        state = .failed
+                    }
                 } else {
+                    DebugLog.shared.warn("BatchReview[\(n)/\(total)]: loadTransferable returned nil")
                     state = .failed
                 }
             } catch {
+                DebugLog.shared.error("BatchReview[\(n)/\(total)]: \(error)")
                 state = .failed
             }
             if let i = entries.firstIndex(where: { $0.id == entry.id }) {
                 entries[i].state = state
             }
+            DebugLog.shared.info("BatchReview[\(n)/\(total)]: \(stateLabel(state))")
+        }
+        DebugLog.shared.info("BatchReview loadAll done")
+    }
+
+    private func stateLabel(_ s: BatchEntry.State) -> String {
+        switch s {
+        case .loading: return "loading"
+        case .ready:   return "ready"
+        case .failed:  return "failed"
         }
     }
 
