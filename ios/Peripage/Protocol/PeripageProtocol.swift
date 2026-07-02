@@ -46,6 +46,11 @@ public enum PeripageProtocol {
     /// Default 8s scan timeout, matching the Python tool.
     public static let scanTimeout: Duration = .seconds(8)
 
+    /// Timeout for a single connect attempt. `central.connect` has no built-in
+    /// timeout; without this a saved-but-out-of-range peripheral (fast reconnect
+    /// path) would hang the queue. On timeout we fall back to a fresh scan.
+    public static let connectTimeout: Duration = .seconds(6)
+
     /// Physical print-head throughput, in raster rows per second. Used to
     /// compute the post-send drain wait: the head still needs
     /// `height / headRowsPerSecond` to physically print, and the paced send

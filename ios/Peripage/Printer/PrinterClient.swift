@@ -22,6 +22,12 @@ public final class PrinterClient: NSObject, PrinterClientProtocol {
     private var pendingWriteAck: CheckedContinuation<Void, Error>?
 
     private var scanTimer: Task<Void, Never>?
+    private var connectTimer: Task<Void, Never>?
+
+    /// Identifier of the last successfully-connected peripheral, cached so we
+    /// can reconnect without a scan. Backed by UserDefaults for cold start.
+    private var savedPeripheralID: UUID?
+    private static let savedPeripheralIDKey = "peripage.lastPeripheralID"
 
     public override init() {
         super.init()
@@ -33,8 +39,45 @@ public final class PrinterClient: NSObject, PrinterClientProtocol {
         connectReadyFired = false
         pendingNotifyCount = 0
         try await waitForPowerOn()
+
+        // Fast path: reconnect to the last-known peripheral by identifier with
+        // no scan. `central.connect` on a retrieved peripheral is a pending
+        // connect that completes as soon as the device is back in range —
+        // typically well under a second vs. a 1–8s scan. Any failure (device
+        // off, out of range, stale identifier) falls back to a fresh scan,
+        // whose successful connect re-saves the current identifier, so a stale
+        // cache self-heals after one job.
+        if let id = loadSavedPeripheralID(),
+           let p = central.retrievePeripherals(withIdentifiers: [id]).first {
+            do {
+                DebugLog.shared.info("Fast reconnect to saved peripheral \(id)…")
+                try await connect(to: p)
+                return
+            } catch {
+                DebugLog.shared.warn("Fast reconnect failed (\(error)); scanning instead")
+                connectReadyFired = false
+                pendingNotifyCount = 0
+                writeChar = nil
+            }
+        }
+
         let p = try await scanForPeripheral()
         try await connect(to: p)
+    }
+
+    private func loadSavedPeripheralID() -> UUID? {
+        if let id = savedPeripheralID { return id }
+        if let s = UserDefaults.standard.string(forKey: Self.savedPeripheralIDKey),
+           let id = UUID(uuidString: s) {
+            savedPeripheralID = id
+            return id
+        }
+        return nil
+    }
+
+    private func savePeripheralID(_ id: UUID) {
+        savedPeripheralID = id
+        UserDefaults.standard.set(id.uuidString, forKey: Self.savedPeripheralIDKey)
     }
 
     /// Resume the connect continuation when all expected notify
@@ -234,10 +277,35 @@ extension PrinterClient {
         state = .connecting(name: p.name ?? "Peripage")
         peripheral = p
         p.delegate = self
-        try await withCheckedThrowingContinuation { (cc: CheckedContinuation<Void, Error>) in
-            self.pendingConnect = cc
-            self.central.connect(p, options: nil)
+        do {
+            try await withCheckedThrowingContinuation { (cc: CheckedContinuation<Void, Error>) in
+                self.pendingConnect = cc
+                self.central.connect(p, options: nil)
+                self.connectTimer?.cancel()
+                self.connectTimer = Task { [weak self] in
+                    try? await Task.sleep(for: PeripageProtocol.connectTimeout)
+                    await self?.connectTimedOut()
+                }
+            }
+        } catch {
+            connectTimer?.cancel(); connectTimer = nil
+            throw error
         }
+        connectTimer?.cancel(); connectTimer = nil
+        // Connection is ready — cache the identifier for the next job's fast
+        // reconnect. Overwrites any stale cache with the current identifier.
+        savePeripheralID(p.identifier)
+    }
+
+    @MainActor
+    private func connectTimedOut() {
+        guard let cc = pendingConnect else { return }
+        DebugLog.shared.warn("Connect timed out; cancelling and falling back")
+        if let p = peripheral { central.cancelPeripheralConnection(p) }
+        peripheral = nil
+        writeChar = nil
+        pendingConnect = nil
+        cc.resume(throwing: BLEError.writeFailed(description: "connect timed out"))
     }
 }
 
