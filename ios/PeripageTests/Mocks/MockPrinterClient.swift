@@ -30,7 +30,7 @@ final class MockPrinterClient: PrinterClientProtocol, @unchecked Sendable {
         lock.lock(); _state = .connected(name: "MockPeriPage"); lock.unlock()
     }
 
-    func send(_ payload: Data, jobId: UUID) async throws {
+    func send(_ payload: Data, jobId: UUID, height: Int) async throws {
         if case .sendThrows(let e) = nextFailures.first {
             lock.lock(); nextFailures.removeFirst(); lock.unlock()
             throw e

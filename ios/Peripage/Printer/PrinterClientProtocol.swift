@@ -9,10 +9,11 @@ public protocol PrinterClientProtocol: AnyObject, Sendable {
     /// failure.
     func ensureConnected() async throws
 
-    /// Send a single payload to the printer in 96-byte chunks, deadline-paced
-    /// at `PeripageProtocol.interChunkDelay`. Updates `state` to
-    /// `.sending(jobId, progress)`. Throws on disconnect / write failure.
-    func send(_ payload: Data, jobId: UUID) async throws
+    /// Send a single payload to the printer in MTU-sized chunks, deadline-paced
+    /// at `PeripageProtocol.targetBytesPerSecond`. Updates `state` to
+    /// `.sending(jobId, progress)`. `height` is the raster row count, used to
+    /// size the post-send drain wait. Throws on disconnect / write failure.
+    func send(_ payload: Data, jobId: UUID, height: Int) async throws
 
     /// Cleanly disconnect (called at queue idle).
     func disconnect() async

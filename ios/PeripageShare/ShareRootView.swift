@@ -169,7 +169,7 @@ struct ShareRootView: View {
                 }
             }
             defer { progressObserver.cancel() }
-            try await printer.send(payload, jobId: jobId)
+            try await printer.send(payload, jobId: jobId, height: processed.height)
             await printer.disconnect()
             phase = .done
         } catch {

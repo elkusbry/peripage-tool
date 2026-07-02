@@ -88,7 +88,7 @@ public final class PrintQueue {
                 return
             }
             jobs[i].status = .sending(progress: 0.0)
-            try await printer.send(payload, jobId: job.id)
+            try await printer.send(payload, jobId: job.id, height: processed.height)
             jobs[i].status = .done
             Haptics.success()
             // Mimic the Python tool's lifecycle: it opens a fresh

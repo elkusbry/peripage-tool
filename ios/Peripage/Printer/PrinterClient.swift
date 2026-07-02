@@ -54,7 +54,7 @@ public final class PrinterClient: NSObject, PrinterClientProtocol {
         cc.resume()
     }
 
-    public func send(_ payload: Data, jobId: UUID) async throws {
+    public func send(_ payload: Data, jobId: UUID, height: Int) async throws {
         guard let peripheral = peripheral, let writeChar = writeChar else {
             throw BLEError.characteristicNotFound
         }
@@ -160,9 +160,17 @@ public final class PrinterClient: NSObject, PrinterClientProtocol {
         let kbps = secs > 0 ? Double(total) / 1024 / secs : 0
         DebugLog.shared.info("send complete: \(total)B in \(String(format: "%.1f", secs))s (\(String(format: "%.1f", kbps)) KB/s), stalls>40ms: \(stallCount), max gap: \(String(format: "%.0f", maxGap.msValue))ms")
 
-        // Settle: real printer needs ~3s to flush its buffer
-        DebugLog.shared.info("send done; waiting 3s for printer to flush")
-        try await Task.sleep(for: .seconds(3))
+        // Settle: the head still needs height/headRowsPerSecond to physically
+        // print, and the paced send already overlapped most of it. Wait only
+        // the remaining head time (plus a safety margin) before disconnecting —
+        // disconnect is the firmware's commit signal, so cutting it short can
+        // truncate the tail. Clamped so tiny prints don't disconnect instantly
+        // and a bad estimate can't hang the queue.
+        let printTime = Duration.seconds(Double(height) / PeripageProtocol.headRowsPerSecond)
+        let remaining = printTime - elapsed + PeripageProtocol.drainSafetyMargin
+        let drain = min(max(remaining, PeripageProtocol.minDrain), PeripageProtocol.maxDrain)
+        DebugLog.shared.info("send done; draining \(String(format: "%.2f", drain.msValue / 1000))s (printTime \(String(format: "%.2f", printTime.msValue / 1000))s − send \(String(format: "%.2f", secs))s + margin)")
+        try await Task.sleep(for: drain)
         state = .connected(name: peripheral.name ?? "Peripage")
     }
 

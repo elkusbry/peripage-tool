@@ -46,6 +46,21 @@ public enum PeripageProtocol {
     /// Default 8s scan timeout, matching the Python tool.
     public static let scanTimeout: Duration = .seconds(8)
 
+    /// Physical print-head throughput, in raster rows per second. Used to
+    /// compute the post-send drain wait: the head still needs
+    /// `height / headRowsPerSecond` to physically print, and the paced send
+    /// already overlaps most of that. Documented at ~89 rows/s.
+    public static let headRowsPerSecond: Double = 89
+
+    /// Safety padding added to the computed drain so we never disconnect (the
+    /// firmware's commit signal) while the head is still finishing the tail.
+    public static let drainSafetyMargin: Duration = .milliseconds(750)
+
+    /// Clamp bounds for the computed drain wait. Floor keeps a tiny print from
+    /// disconnecting instantly; ceiling prevents a hang if the estimate is off.
+    public static let minDrain: Duration = .milliseconds(500)
+    public static let maxDrain: Duration = .seconds(6)
+
     /// BLE name prefix advertised by Peripage devices.
     public static let nameNamePrefix: String = "PeriPage"
 
