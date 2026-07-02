@@ -10,15 +10,32 @@ public enum PeripageProtocol {
     /// 1bpp packed row width in bytes. 576 / 8 = 72.
     public static let rowBytes: Int = 72
 
-    /// Max BLE write payload chunk. Multiple of rowBytes.
+    /// Minimum / fallback BLE write payload chunk. The actual chunk size is the
+    /// negotiated MTU clamped to `maxChunkSize`, but never below this (see
+    /// `PrinterClient.send`).
     public static let chunkSize: Int = 96
 
-    /// Target inter-chunk interval during BLE send. Transport pacing only —
-    /// NOT part of the payload and NOT covered by the parity fixtures, so this
-    /// can be retuned without regenerating fixtures. 12ms/96B = 8.0 KB/s ≈ 111
-    /// rows/s vs the head's ~89 rows/s (25% headroom). Was 15ms (zero headroom),
-    /// which caused intermittent underrun gaps — the head outran delivery and
-    /// fed blank paper. If overrun ever appears (shifted image), bump toward 15.
+    /// Ceiling on the per-write chunk. Modern iPhones negotiate an ATT MTU of
+    /// 180–244 payload bytes; using MTU-sized writes means ~2.5× fewer
+    /// `writeValue` calls (less MainActor jitter, fewer stall windows) at the
+    /// SAME byte rate the printer sees. Cap it so a large negotiated MTU can't
+    /// produce a pathologically big single write. If overrun ever appears
+    /// (shifted image), lower this. Chunk size need NOT align to rowBytes — the
+    /// printer reassembles the byte stream.
+    public static let maxChunkSize: Int = 244
+
+    /// Target delivery rate to the print head, in bytes/second. This is the
+    /// real pacing invariant (was expressed as 96 B / 12 ms = 8.0 KB/s ≈ 111
+    /// rows/s vs the head's ~89 rows/s, 25% headroom). The per-chunk delay is
+    /// derived from this and the actual chunk size, so changing the chunk size
+    /// does not change the rate. Transport pacing only — NOT part of the payload
+    /// and NOT covered by the parity fixtures, so it can be retuned freely. If
+    /// underrun gaps appear (blank bands), raise the rate slightly; if overrun
+    /// appears (shifted image), lower it.
+    public static let targetBytesPerSecond: Double = 8000
+
+    /// Legacy fixed inter-chunk interval, retained for reference. No longer used
+    /// by the send loop, which derives its delay from `targetBytesPerSecond`.
     public static let interChunkDelay: Duration = .milliseconds(12)
 
     /// If deadline pacing falls this far behind (e.g. a long MainActor stall),

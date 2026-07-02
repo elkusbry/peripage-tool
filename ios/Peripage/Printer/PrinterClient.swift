@@ -72,9 +72,16 @@ public final class PrinterClient: NSObject, PrinterClientProtocol {
         // Use the negotiated MTU rather than a hard-coded 96. Most BLE 4.2+
         // peripherals expose 100–250 bytes of payload; using more bytes per
         // write means fewer round-trips and less chance of buffer timeout.
+        // Clamp to [chunkSize, maxChunkSize]: never below the known-good 96 B
+        // floor, never above the ceiling that bounds a single write.
         let maxLen = peripheral.maximumWriteValueLength(for: writeType)
-        let chunkSize = min(PeripageProtocol.chunkSize, maxLen)
-        DebugLog.shared.info("send: \(total) bytes, chunk=\(chunkSize) (mtu=\(maxLen)), type=\(writeType == .withoutResponse ? "WR" : "withResp")")
+        let chunkSize = max(PeripageProtocol.chunkSize,
+                            min(maxLen, PeripageProtocol.maxChunkSize))
+        // Derive the inter-chunk delay from the byte rate so a larger chunk
+        // doesn't send faster — the printer sees the same ~8 KB/s either way.
+        let perChunkDelay: Duration =
+            .seconds(Double(chunkSize) / PeripageProtocol.targetBytesPerSecond)
+        DebugLog.shared.info("send: \(total) bytes, chunk=\(chunkSize) (mtu=\(maxLen)), delay=\(String(format: "%.1f", perChunkDelay.msValue))ms, type=\(writeType == .withoutResponse ? "WR" : "withResp")")
 
         // Deadline pacing + stall instrumentation. We schedule chunk n to go no
         // earlier than `scheduleAnchor + n × interChunkDelay` on a monotonic
@@ -129,12 +136,12 @@ public final class PrinterClient: NSObject, PrinterClientProtocol {
                 // schedule — the burst that refills the starved printer buffer.
                 // Cap catch-up: if we're more than maxPacingBacklog behind,
                 // re-anchor so the burst stays bounded (~12 chunks).
-                let deadline = scheduleAnchor + PeripageProtocol.interChunkDelay * chunkIndex
+                let deadline = scheduleAnchor + perChunkDelay * chunkIndex
                 let now = clock.now
                 if now < deadline {
                     try await Task.sleep(until: deadline, clock: clock)
                 } else if now - deadline > PeripageProtocol.maxPacingBacklog {
-                    scheduleAnchor = now - PeripageProtocol.interChunkDelay * chunkIndex
+                    scheduleAnchor = now - perChunkDelay * chunkIndex
                 }
             }
 
