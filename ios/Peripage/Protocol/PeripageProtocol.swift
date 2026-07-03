@@ -15,14 +15,13 @@ public enum PeripageProtocol {
     /// `PrinterClient.send`).
     public static let chunkSize: Int = 96
 
-    /// Ceiling on the per-write chunk. Modern iPhones negotiate an ATT MTU of
-    /// 180–244 payload bytes; using MTU-sized writes means ~2.5× fewer
-    /// `writeValue` calls (less MainActor jitter, fewer stall windows) at the
-    /// SAME byte rate the printer sees. Cap it so a large negotiated MTU can't
-    /// produce a pathologically big single write. If overrun ever appears
-    /// (shifted image), lower this. Chunk size need NOT align to rowBytes — the
-    /// printer reassembles the byte stream.
-    public static let maxChunkSize: Int = 244
+    /// Ceiling on the per-write chunk. NOTE: this firmware silently drops /
+    /// mis-assembles BLE writes larger than 96 bytes — the print "sends" fine
+    /// but nothing comes out. 96 is the empirically-known-good write size (see
+    /// print_photo.py), so despite modern iPhones negotiating a 180–244 byte
+    /// MTU, we must NOT exceed 96 here. Keep this at 96 unless a future firmware
+    /// is confirmed to accept larger writes.
+    public static let maxChunkSize: Int = 96
 
     /// Target delivery rate to the print head, in bytes/second. This is the
     /// real pacing invariant (was expressed as 96 B / 12 ms = 8.0 KB/s ≈ 111
